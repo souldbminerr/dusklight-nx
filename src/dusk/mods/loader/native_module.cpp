@@ -1,9 +1,14 @@
 #include "native_module.hpp"
 
+#include <stdexcept>
+#include <string>
+
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
+#elif !defined(__SWITCH__)
+#include <dlfcn.h>
 #endif
 
 namespace {
@@ -28,8 +33,18 @@ std::string pl_dlerror() {
     }
     return s;
 }
+#elif defined(__SWITCH__)
+void* pl_dlopen(const std::filesystem::path&) {
+    return nullptr;
+}
+void* pl_dlsym(void*, const char*) {
+    return nullptr;
+}
+void pl_dlclose(void*) {}
+std::string pl_dlerror() {
+    return "native code mods are not supported on this platform";
+}
 #else
-#include <dlfcn.h>
 void* pl_dlopen(const std::filesystem::path& p) {
     return dlopen(p.c_str(), RTLD_LAZY | RTLD_LOCAL);
 }

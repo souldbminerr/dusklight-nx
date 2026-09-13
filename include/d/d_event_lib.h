@@ -46,7 +46,7 @@ public:
 
     /* 0x4 */ fopAc_ac_c* mActor;
     /* 0x8 */ action_class<dEvLib_callback_c>* mAction;
-    /* 0xC */ u16 _C;
+    /* 0xC */ u16 mSubParam;
 };
 
 #endif /* D_EVENT_D_EVENT_LIB_H */

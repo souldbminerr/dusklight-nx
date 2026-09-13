@@ -1,0 +1,938 @@
+diff --git a/src/dawn/common/DynamicLib.cpp b/src/dawn/common/DynamicLib.cpp
+a/src/dawn/common/DynamicLib.cpp b/src/dawn/common/DynamicLib.cpp
+--- a/src/dawn/common/DynamicLib.cpp
++++ b/src/dawn/common/DynamicLib.cpp
+@@ -39,11 +39,34 @@
+ #endif
+ #elif DAWN_PLATFORM_IS(POSIX)
+ #include <dlfcn.h>
++#elif DAWN_PLATFORM_IS(SWITCH)
+ #else
+ #error "Unsupported platform for DynamicLib"
+ #endif
+ 
+ namespace dawn {
++namespace {
++
++#if DAWN_PLATFORM_IS(WINDOWS) && !DAWN_PLATFORM_IS(WINUWP) && \
++    !defined(DAWN_FORCE_SYSTEM_COMPONENT_LOAD)
++bool IsWindowsPathSeparator(char character) {
++    return character == '\\' || character == '/';
++}
++
++bool IsAsciiAlpha(char character) {
++    return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z');
++}
++
++bool IsFullyQualifiedWindowsPath(const std::string& path) {
++    const bool isDrivePath = path.size() >= 3 && IsAsciiAlpha(path[0]) && path[1] == ':' &&
++                             IsWindowsPathSeparator(path[2]);
++    const bool isUncPath =
++        path.size() >= 2 && IsWindowsPathSeparator(path[0]) && IsWindowsPathSeparator(path[1]);
++    return isDrivePath || isUncPath;
++}
++#endif
++
++}  // anonymous namespace
+ 
+ DynamicLib::~DynamicLib() {
+     Close();
+@@ -106,6 +132,12 @@
+     if (mHandle == nullptr && error != nullptr) {
+         *error = dlerror();
+     }
++#elif DAWN_PLATFORM_IS(SWITCH)
++    (void)filename;
++    if (error != nullptr) {
++        *error = "Dynamic library loading is unavailable on Switch";
++    }
++    mHandle = nullptr;
+ #else
+ #error "Unsupported platform for DynamicLib"
+ #endif
+@@ -130,6 +162,12 @@
+     if (mHandle == nullptr && error != nullptr) {
+         *error = dlerror();
+     }
++#elif DAWN_PLATFORM_IS(SWITCH)
++    (void)filename;
++    if (error != nullptr) {
++        *error = "Dynamic library loading is unavailable on Switch";
++    }
++    mHandle = nullptr;
+ #else
+ #error "Unsupported platform for DynamicLib"
+ #endif
+@@ -167,6 +205,7 @@
+ #endif
+ #elif DAWN_PLATFORM_IS(POSIX)
+         dlclose(mHandle);
++#elif DAWN_PLATFORM_IS(SWITCH)
+ #else
+ #error "Unsupported platform for DynamicLib"
+ #endif
+@@ -191,6 +230,11 @@
+     if (proc == nullptr && error != nullptr) {
+         *error = dlerror();
+     }
++#elif DAWN_PLATFORM_IS(SWITCH)
++    (void)procName;
++    if (error != nullptr) {
++        *error = "Dynamic symbol lookup is unavailable on Switch";
++    }
+ #else
+ #error "Unsupported platform for DynamicLib"
+ #endif
+diff --git a/src/dawn/common/DynamicLib.h b/src/dawn/common/DynamicLib.h
+a/src/dawn/common/DynamicLib.h b/src/dawn/common/DynamicLib.h
+--- a/src/dawn/common/DynamicLib.h
++++ b/src/dawn/common/DynamicLib.h
+@@ -37,7 +37,7 @@
+ 
+ #if DAWN_PLATFORM_IS(WINDOWS)
+ #include "partition_alloc/pointers/raw_ptr.h"
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+ #include "partition_alloc/pointers/raw_ptr_exclusion.h"
+ #else
+ #error "Unsupported platform for DynamicLib"
+@@ -84,7 +84,7 @@
+     // This is an HMODULE (aka void*). It should point to real memory, so we can use raw_ptr:
+     // > A handle to a module. This is the base address of the module in memory.
+     raw_ptr<void> mHandle = nullptr;
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+     // On POSIX we use `dlopen`, which returns a "handle" which may not be a real pointer:
+     // > The value of this symbol table handle should not be interpreted in any way by the caller.
+     RAW_PTR_EXCLUSION void* mHandle = nullptr;
+diff --git a/src/dawn/common/SystemHandle.cpp b/src/dawn/common/SystemHandle.cpp
+a/src/dawn/common/SystemHandle.cpp b/src/dawn/common/SystemHandle.cpp
+--- a/src/dawn/common/SystemHandle.cpp
++++ b/src/dawn/common/SystemHandle.cpp
+@@ -36,7 +36,7 @@
+ #include "src/utils/windows_with_undefs.h"
+ #elif DAWN_PLATFORM_IS(FUCHSIA)
+ #include <zircon/syscalls.h>
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+ #include <unistd.h>
+ #endif
+ 
+@@ -86,7 +86,7 @@
+     DAWN_CHECK(status == ZX_OK);
+ }
+ 
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+ 
+ constexpr inline int kInvalidHandle = -1;
+ 
+diff --git a/src/dawn/common/SystemHandle.h b/src/dawn/common/SystemHandle.h
+a/src/dawn/common/SystemHandle.h b/src/dawn/common/SystemHandle.h
+--- a/src/dawn/common/SystemHandle.h
++++ b/src/dawn/common/SystemHandle.h
+@@ -44,7 +44,7 @@
+     using Handle = void*;
+ #elif DAWN_PLATFORM_IS(FUCHSIA)
+     using Handle = uint32_t;
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+     using Handle = int;
+ #else
+ #error "Platform not supported."
+diff --git a/src/dawn/common/SystemUtils.cpp b/src/dawn/common/SystemUtils.cpp
+a/src/dawn/common/SystemUtils.cpp b/src/dawn/common/SystemUtils.cpp
+--- a/src/dawn/common/SystemUtils.cpp
++++ b/src/dawn/common/SystemUtils.cpp
+@@ -47,6 +47,8 @@
+ #include <mach-o/dyld.h>
+ 
+ #include <vector>
++#elif DAWN_PLATFORM_IS(SWITCH)
++#include <cstdlib>
+ #endif
+ 
+ #include <array>
+@@ -86,7 +88,7 @@
+ bool SetEnvironmentVar(const char* variableName, const char* value) {
+     return SetEnvironmentVariableA(variableName, value) == TRUE;
+ }
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+ const char* GetPathSeparator() {
+     return "/";
+ }
+@@ -98,10 +100,16 @@
+ }
+ 
+ bool SetEnvironmentVar(const char* variableName, const char* value) {
++#if DAWN_PLATFORM_IS(SWITCH)
++    (void)variableName;
++    (void)value;
++    return false;
++#else
+     if (value == nullptr) {
+         return unsetenv(variableName) == 0;
+     }
+     return setenv(variableName, value, 1) == 0;
++#endif
+ }
+ #else
+ #error "Implement Get/SetEnvironmentVar for your platform."
+@@ -153,6 +161,10 @@
+ std::optional<std::string> GetExecutablePath() {
+     return {};
+ }
++#elif DAWN_PLATFORM_IS(SWITCH)
++std::optional<std::string> GetExecutablePath() {
++    return {};
++}
+ #else
+ #error "Implement GetExecutablePath for your platform."
+ #endif
+@@ -207,6 +219,10 @@
+ std::optional<std::string> GetModulePath() {
+     return {};
+ }
++#elif DAWN_PLATFORM_IS(SWITCH)
++std::optional<std::string> GetModulePath() {
++    return {};
++}
+ #else
+ #error "Implement GetModulePath for your platform."
+ #endif
+diff --git a/src/dawn/common/ThreadLocal.cpp b/src/dawn/common/ThreadLocal.cpp
+a/src/dawn/common/ThreadLocal.cpp b/src/dawn/common/ThreadLocal.cpp
+--- a/src/dawn/common/ThreadLocal.cpp
++++ b/src/dawn/common/ThreadLocal.cpp
+@@ -29,6 +29,10 @@
+ 
+ #include <atomic>
+ 
++#if defined(__SWITCH__)
++#include <pthread.h>
++#endif
++
+ #include "absl/base/no_destructor.h"
+ #include "absl/container/flat_hash_set.h"
+ #include "src/dawn/common/MutexProtected.h"
+@@ -44,6 +48,28 @@
+     static absl::NoDestructor<MutexProtected<absl::flat_hash_set<ThreadUniqueId>>> sThreadUniqueIds;
+     return *sThreadUniqueIds;
+ }
++
++struct ThreadRef {
++    ThreadUniqueId mThreadUniqueId;
++
++    explicit ThreadRef(ThreadUniqueId ThreadUniqueId) : mThreadUniqueId(ThreadUniqueId) {
++        GetAliveThreads()->insert(mThreadUniqueId);
++    }
++    ~ThreadRef() { GetAliveThreads()->erase(mThreadUniqueId); }
++};
++
++#if defined(__SWITCH__)
++pthread_key_t gSwitchThreadRefKey;
++pthread_once_t gSwitchThreadRefKeyOnce = PTHREAD_ONCE_INIT;
++
++void DestroySwitchThreadRef(void* value) {
++    delete static_cast<ThreadRef*>(value);
++}
++
++void InitSwitchThreadRefKey() {
++    pthread_key_create(&gSwitchThreadRefKey, DestroySwitchThreadRef);
++}
++#endif
+ }  // anonymous namespace
+ 
+ ThreadUniqueId GetThreadUniqueId() {
+@@ -54,18 +80,22 @@
+     // ThreadUniqueId from a globally static set of "running" ThreadUniqueIds. This allows us to
+     // check whether a ThreadUniqueId is still running since thread_local variables are destroyed
+     // when a thread is terminated.
+-    struct ThreadRef {
+-        ThreadUniqueId mThreadUniqueId;
+-
+-        explicit ThreadRef(ThreadUniqueId ThreadUniqueId) : mThreadUniqueId(ThreadUniqueId) {
+-            GetAliveThreads()->insert(mThreadUniqueId);
+-        }
+-        ~ThreadRef() { GetAliveThreads()->erase(mThreadUniqueId); }
+-    };
++#if defined(__SWITCH__)
++    // libnx/static PIE currently crashes in this code path when using C++ thread_local with a
++    // destructor. Use pthread TLS so Dawn error-scope routing can run after backend errors.
++    pthread_once(&gSwitchThreadRefKeyOnce, InitSwitchThreadRefKey);
++    ThreadRef* threadRef = static_cast<ThreadRef*>(pthread_getspecific(gSwitchThreadRefKey));
++    if (threadRef == nullptr) {
++        threadRef = new ThreadRef(sNextThreadUniqueId++);
++        pthread_setspecific(gSwitchThreadRefKey, threadRef);
++    }
++    return threadRef->mThreadUniqueId;
++#else
+     // This ThreadRef is initialized the first time GetThreadUniqueId is called for each thread (see
+     // https://stackoverflow.com/a/49821006), and destroyed when the thread terminates.
+     static thread_local ThreadRef sThreadRef(sNextThreadUniqueId++);
+     return sThreadRef.mThreadUniqueId;
++#endif
+ }
+ 
+ bool IsThreadAlive(ThreadUniqueId ThreadUniqueId) {
+diff --git a/src/dawn/common/vulkan_platform.h b/src/dawn/common/vulkan_platform.h
+a/src/dawn/common/vulkan_platform.h b/src/dawn/common/vulkan_platform.h
+--- a/src/dawn/common/vulkan_platform.h
++++ b/src/dawn/common/vulkan_platform.h
+@@ -186,6 +186,12 @@
+ #endif
+ #endif  // DAWN_PLATFORM_IS(FUCHSIA)
+ 
++#if DAWN_PLATFORM_IS(SWITCH)
++#ifndef VK_USE_PLATFORM_VI_NN
++#define VK_USE_PLATFORM_VI_NN
++#endif
++#endif  // DAWN_PLATFORM_IS(SWITCH)
++
+ // The actual inclusion of vulkan.h!
+ #define VK_NO_PROTOTYPES
+ #include <vulkan/vulkan.h>
+diff --git a/src/dawn/dawn.json b/src/dawn/dawn.json
+a/src/dawn/dawn.json b/src/dawn/dawn.json
+--- a/src/dawn/dawn.json
++++ b/src/dawn/dawn.json
+@@ -4041,6 +3998,15 @@
+         "members": [
+             {"name": "connection", "type": "void", "annotation": "*"},
+             {"name": "window", "type": "uint32_t"}
++        ]
++    },
++    "surface source switch NWindow": {
++        "category": "structure",
++        "chained": "in",
++        "chain roots": ["surface descriptor"],
++        "tags": ["native"],
++        "members": [
++            {"name": "window", "type": "void", "annotation": "*"}
+         ]
+     },
+     "surface source xlib window": {
+@@ -4144,6 +4110,7 @@
+             {"value": 14, "name": "external texture binding entry"},
+             {"value": 15, "name": "compatibility mode limits"},
+             {"value": 16, "name": "texture binding view dimension"},
++            {"value": 17, "name": "surface source switch NWindow"},
+ 
+             {"value": 0, "name": "emscripten surface source canvas HTML selector", "tags": ["emscripten"]},
+ 
+diff --git a/src/dawn/dawn_wire.json b/src/dawn/dawn_wire.json
+a/src/dawn/dawn_wire.json b/src/dawn/dawn_wire.json
+--- a/src/dawn/dawn_wire.json
++++ b/src/dawn/dawn_wire.json
+@@ -243,7 +244,8 @@
+             "SurfaceSourceXlibWindow",
+             "SurfaceSourceWaylandSurface",
+             "SurfaceSourceAndroidNativeWindow",
+-            "SurfaceSourceXCBWindow"
++            "SurfaceSourceXCBWindow",
++            "SurfaceSourceSwitchNWindow"
+         ],
+         "client_side_commands": [
+             "AdapterCreateDevice",
+diff --git a/src/dawn/native/CMakeLists.txt b/src/dawn/native/CMakeLists.txt
+a/src/dawn/native/CMakeLists.txt b/src/dawn/native/CMakeLists.txt
+--- a/src/dawn/native/CMakeLists.txt
++++ b/src/dawn/native/CMakeLists.txt
+@@ -884,7 +883,7 @@
+     endif()
+ endif()
+ 
+-if (DAWN_ENABLE_D3D12 OR DAWN_ENABLE_VULKAN)
++if ((DAWN_ENABLE_D3D12 OR DAWN_ENABLE_VULKAN) AND NOT DAWN_PLATFORM_SWITCH)
+     list(APPEND conditional_private_depends RenderDocApi)
+     list(APPEND private_headers "utils/RenderDoc.h")
+     list(APPEND sources "utils/RenderDoc.cpp")
+diff --git a/src/dawn/native/Surface.cpp b/src/dawn/native/Surface.cpp
+a/src/dawn/native/Surface.cpp b/src/dawn/native/Surface.cpp
+--- a/src/dawn/native/Surface.cpp
++++ b/src/dawn/native/Surface.cpp
+@@ -82,6 +82,9 @@
+         case Surface::Type::WindowsWinUISwapChainPanel:
+             s->Append("WindowsWinUISwapChainPanel");
+             break;
++        case Surface::Type::SwitchNWindow:
++            s->Append("SwitchNWindow");
++            break;
+         case Surface::Type::XlibWindow:
+             s->Append("XlibWindow");
+             break;
+@@ -116,6 +119,7 @@
+                   Branch<SurfaceSourceWindowsHWND>, Branch<SurfaceDescriptorFromWindowsCoreWindow>,
+                   Branch<SurfaceDescriptorFromWindowsUWPSwapChainPanel>,
+                   Branch<SurfaceDescriptorFromWindowsWinUISwapChainPanel>,
++                  Branch<SurfaceSourceSwitchNWindow>,
+                   Branch<SurfaceSourceXlibWindow>, Branch<SurfaceSourceWaylandSurface>>()));
+     switch (type) {
+ #if DAWN_PLATFORM_IS(ANDROID)
+@@ -177,6 +181,14 @@
+             return descriptor;
+         }
+ #endif  // defined(DAWN_USE_WINDOWS_UI)
++#if DAWN_PLATFORM_IS(SWITCH)
++        case wgpu::SType::SurfaceSourceSwitchNWindow: {
++            auto* subDesc = descriptor.Get<SurfaceSourceSwitchNWindow>();
++            DAWN_ASSERT(subDesc != nullptr);
++            DAWN_INVALID_IF(subDesc->window == nullptr, "Switch NWindow is nullptr.");
++            return descriptor;
++        }
++#endif  // DAWN_PLATFORM_IS(SWITCH)
+ #if defined(DAWN_USE_WAYLAND)
+         case wgpu::SType::SurfaceSourceWaylandSurface: {
+             auto* subDesc = descriptor.Get<SurfaceSourceWaylandSurface>();
+@@ -304,6 +316,7 @@
+                 Branch<SurfaceSourceWindowsHWND>, Branch<SurfaceDescriptorFromWindowsCoreWindow>,
+                 Branch<SurfaceDescriptorFromWindowsUWPSwapChainPanel>,
+                 Branch<SurfaceDescriptorFromWindowsWinUISwapChainPanel>,
++                Branch<SurfaceSourceSwitchNWindow>,
+                 Branch<SurfaceSourceXlibWindow>, Branch<SurfaceSourceWaylandSurface>>()
+             .AcquireSuccess();
+     switch (type) {
+@@ -346,6 +359,12 @@
+             break;
+         }
+ #endif  // defined(DAWN_USE_WINDOWS_UI)
++        case wgpu::SType::SurfaceSourceSwitchNWindow: {
++            auto* subDesc = descriptor.Get<SurfaceSourceSwitchNWindow>();
++            mType = Type::SwitchNWindow;
++            mSwitchNWindow = subDesc->window;
++            break;
++        }
+         case wgpu::SType::SurfaceSourceWaylandSurface: {
+             auto* subDesc = descriptor.Get<SurfaceSourceWaylandSurface>();
+             mType = Type::WaylandSurface;
+@@ -452,6 +471,12 @@
+ #endif
+ }
+ 
++void* Surface::GetSwitchNWindow() const {
++    DAWN_CHECK(!IsError());
++    DAWN_CHECK(mType == Type::SwitchNWindow);
++    return mSwitchNWindow;
++}
++
+ void* Surface::GetXDisplay() const {
+     DAWN_CHECK(!IsError());
+     DAWN_CHECK(mType == Type::XlibWindow);
+diff --git a/src/dawn/native/Surface.h b/src/dawn/native/Surface.h
+a/src/dawn/native/Surface.h b/src/dawn/native/Surface.h
+--- a/src/dawn/native/Surface.h
++++ b/src/dawn/native/Surface.h
+@@ -84,6 +84,7 @@
+         WindowsCoreWindow,
+         WindowsUWPSwapChainPanel,
+         WindowsWinUISwapChainPanel,
++        SwitchNWindow,
+         XlibWindow,
+     };
+     Type GetType() const;
+@@ -112,6 +113,9 @@
+ 
+     // Valid to call if the type is WindowsWinUISwapChainPanel
+     IUnknown* GetWinUISwapChainPanel() const;
++
++    // Valid to call if the type is SwitchNWindow
++    void* GetSwitchNWindow() const;
+ 
+     // Valid to call if the type is WindowsXlib
+     void* GetXDisplay() const;
+@@ -160,6 +164,9 @@
+     // ANativeWindow
+     raw_ptr<void> mAndroidNativeWindow = nullptr;
+ 
++    // NWindow
++    raw_ptr<void> mSwitchNWindow = nullptr;
++
+     // Wayland
+     raw_ptr<void> mWaylandDisplay = nullptr;
+     raw_ptr<void> mWaylandSurface = nullptr;
+diff --git a/src/dawn/native/SystemEvent.cpp b/src/dawn/native/SystemEvent.cpp
+a/src/dawn/native/SystemEvent.cpp b/src/dawn/native/SystemEvent.cpp
+--- a/src/dawn/native/SystemEvent.cpp
++++ b/src/dawn/native/SystemEvent.cpp
+@@ -37,7 +37,7 @@
+ #elif DAWN_PLATFORM_IS(FUCHSIA)
+ #include <poll.h>
+ #include <unistd.h>
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+ #include <sys/poll.h>
+ #include <unistd.h>
+ #endif
+@@ -87,7 +87,7 @@
+         bool success = SetEvent(mPrimitive.Get());
+         DAWN_CHECK(success);
+     }
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+     {
+         // Send one byte to signal the receiver
+         char zero[1] = {0};
+@@ -117,7 +117,7 @@
+     sender.mPrimitive = std::move(eventDup);
+ 
+     return std::make_pair(std::move(sender), std::move(receiver));
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+     int pipeFds[2];
+     int status = pipe(pipeFds);
+     DAWN_CHECK(status >= 0);
+diff --git a/src/dawn/native/WaitAnySystemEvent.h b/src/dawn/native/WaitAnySystemEvent.h
+a/src/dawn/native/WaitAnySystemEvent.h b/src/dawn/native/WaitAnySystemEvent.h
+--- a/src/dawn/native/WaitAnySystemEvent.h
++++ b/src/dawn/native/WaitAnySystemEvent.h
+@@ -31,14 +31,22 @@
+ #include <limits>
+ #include <utility>
+ 
++#include "src/utils/compiler.h"
+ #include "src/utils/platform.h"
+ 
+ #if DAWN_PLATFORM_IS(WINDOWS)
+ #include "src/utils/windows_with_undefs.h"
++#elif DAWN_PLATFORM_IS(FUCHSIA)
++#include <poll.h>
++#include <unistd.h>
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
++#include <sys/poll.h>
++#include <unistd.h>
+ #endif
+ 
++#include "absl/container/inlined_vector.h"
+ #include "src/dawn/native/SystemEvent.h"
+-#include "src/utils/span.h"
++#include "src/utils/log.h"
+ 
+ namespace dawn::native {
+ 
+@@ -57,14 +65,79 @@
+ 
+ #if DAWN_PLATFORM_IS(WINDOWS)
+ #define ToMilliseconds ToMillisecondsGeneric<DWORD, INFINITE>
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+ #define ToMilliseconds ToMillisecondsGeneric<int, -1>
+ #endif
+ 
+-// WaitAnySystemEvent on an iterator range converts those iterators to the platform-specific wait
+-// handles, and then waits on them.
+-[[nodiscard]] bool WaitAnySystemEvent(Span<std::pair<const SystemEventReceiver&, bool*>> events,
+-                                      Nanoseconds timeout);
++// WaitAnySystemEvent on an iterator range converts those iterators to the
++// platform-specific wait handles, and then waits on them.
++template <typename It>
++[[nodiscard]] bool WaitAnySystemEvent(It begin, It end, Nanoseconds timeout) {
++    static_assert(std::is_same_v<typename std::iterator_traits<It>::value_type,
++                                 std::pair<const SystemEventReceiver&, bool*>>);
++    size_t count = sign_cast(std::distance(begin, end));
++    if (count == 0) {
++        return false;
++    }
++#if DAWN_PLATFORM_IS(WINDOWS)
++    absl::InlinedVector<HANDLE, 4 /* avoid heap allocation for small waits */> handles;
++    handles.reserve(count);
++    for (auto it = begin; it != end; DAWN_UNSAFE_TODO(++it)) {
++        handles.push_back((*it).first.mPrimitive.Get());
++    }
++    DAWN_ASSERT(handles.size() <= MAXIMUM_WAIT_OBJECTS);
++    DWORD status = WaitForMultipleObjects(DWORD(handles.size()), handles.data(),
++                                          /*bWaitAll=*/false, ToMilliseconds(timeout));
++    if (status == WAIT_TIMEOUT) {
++        return false;
++    }
++    DAWN_CHECK(WAIT_OBJECT_0 <= status && status < WAIT_OBJECT_0 + count);
++    const ptrdiff_t completedIndex = sign_cast(status - WAIT_OBJECT_0);
++
++    *(*(DAWN_UNSAFE_TODO(begin + completedIndex))).second = true;
++    return true;
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
++    absl::InlinedVector<pollfd, 4 /* avoid heap allocation for small waits */> pollfds;
++    pollfds.reserve(count);
++    for (auto it = begin; it != end; DAWN_UNSAFE_TODO(++it)) {
++        pollfds.push_back(pollfd{static_cast<int>((*it).first.mPrimitive.Get()), POLLIN, 0});
++    }
++    int status = 0;
++    bool retry = false;
++    do {
++        retry = false;
++        status =
++            poll(pollfds.data(), checked_cast<nfds_t>(pollfds.size()), ToMilliseconds(timeout));
++        if (status < 0) {
++            int lErrno = errno;
++            if (EAGAIN == lErrno || EINTR == lErrno) {
++                retry = true;
++            } else {
++                dawn::ErrorLog() << "poll errno=" << lErrno;
++            }
++        }
++    } while (retry);
++
++    DAWN_CHECK(status >= 0);
++    if (status == 0) {
++        return false;
++    }
++
++    size_t i = 0;
++    for (auto it = begin; it != end; DAWN_UNSAFE_TODO(++it), ++i) {
++        int revents = pollfds[i].revents;
++        static constexpr int kAllowedEvents = POLLIN | POLLHUP;
++        DAWN_CHECK((revents & kAllowedEvents) == revents);
++
++        bool ready = (pollfds[i].revents & POLLIN) != 0;
++        *(*it).second = ready;
++    }
++
++    return true;
++#else
++    DAWN_UNREACHABLE();  // Not implemented.
++#endif
++}
+ 
+ }  // namespace dawn::native
+ 
+diff --git a/src/dawn/native/vulkan/BackendVk.cpp b/src/dawn/native/vulkan/BackendVk.cpp
+a/src/dawn/native/vulkan/BackendVk.cpp b/src/dawn/native/vulkan/BackendVk.cpp
+--- a/src/dawn/native/vulkan/BackendVk.cpp
++++ b/src/dawn/native/vulkan/BackendVk.cpp
+@@ -69,6 +69,8 @@
+ constexpr char kVulkanLibName[] = "libvulkan.dylib";
+ #elif DAWN_PLATFORM_IS(FUCHSIA)
+ constexpr char kVulkanLibName[] = "libvulkan.so";
++#elif DAWN_PLATFORM_IS(SWITCH)
++constexpr char kVulkanLibName[] = "";
+ #else
+ #error "Unimplemented Vulkan backend platform"
+ #endif
+diff --git a/src/dawn/native/vulkan/ExternalHandle.h b/src/dawn/native/vulkan/ExternalHandle.h
+a/src/dawn/native/vulkan/ExternalHandle.h b/src/dawn/native/vulkan/ExternalHandle.h
+--- a/src/dawn/native/vulkan/ExternalHandle.h
++++ b/src/dawn/native/vulkan/ExternalHandle.h
+@@ -39,7 +39,7 @@
+ #elif DAWN_PLATFORM_IS(FUCHSIA)
+ using ExternalSemaphoreHandle = zx_handle_t;
+ const ExternalSemaphoreHandle kNullExternalSemaphoreHandle = ZX_HANDLE_INVALID;
+-#elif DAWN_PLATFORM_IS(POSIX)
++#elif DAWN_PLATFORM_IS(POSIX) || DAWN_PLATFORM_IS(SWITCH)
+ using ExternalSemaphoreHandle = int;
+ const ExternalSemaphoreHandle kNullExternalSemaphoreHandle = -1;
+ #else
+diff --git a/src/dawn/native/vulkan/SwapChainVk.cpp b/src/dawn/native/vulkan/SwapChainVk.cpp
+a/src/dawn/native/vulkan/SwapChainVk.cpp b/src/dawn/native/vulkan/SwapChainVk.cpp
+--- a/src/dawn/native/vulkan/SwapChainVk.cpp
++++ b/src/dawn/native/vulkan/SwapChainVk.cpp
+@@ -672,6 +666,27 @@
+ 
+ #endif  // DAWN_PLATFORM_IS(ANDROID)
+ 
++#if DAWN_PLATFORM_IS(SWITCH)
++        case Surface::Type::SwitchNWindow: {
++            if (info.HasExt(InstanceExt::ViSurface)) {
++                DAWN_ASSERT(surface->GetSwitchNWindow() != nullptr);
++
++                VkViSurfaceCreateInfoNN createInfo;
++                createInfo.sType = VK_STRUCTURE_TYPE_VI_SURFACE_CREATE_INFO_NN;
++                createInfo.pNext = nullptr;
++                createInfo.flags = 0;
++                createInfo.window = surface->GetSwitchNWindow();
++
++                VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
++                DAWN_TRY(CheckVkSuccess(
++                    fn.CreateViSurfaceNN(vkInstance, &createInfo, nullptr, &*vkSurface),
++                    "CreateViSurfaceNN"));
++                return vkSurface;
++            }
++            break;
++        }
++#endif  // DAWN_PLATFORM_IS(SWITCH)
++
+ #if defined(DAWN_USE_WAYLAND)
+         case Surface::Type::WaylandSurface: {
+             if (info.HasExt(InstanceExt::WaylandSurface)) {
+diff --git a/src/dawn/native/vulkan/VulkanExtensions.cpp b/src/dawn/native/vulkan/VulkanExtensions.cpp
+a/src/dawn/native/vulkan/VulkanExtensions.cpp b/src/dawn/native/vulkan/VulkanExtensions.cpp
+--- a/src/dawn/native/vulkan/VulkanExtensions.cpp
++++ b/src/dawn/native/vulkan/VulkanExtensions.cpp
+@@ -49,6 +49,7 @@
+     {InstanceExt::XcbSurface, "VK_KHR_xcb_surface"},
+     {InstanceExt::XlibSurface, "VK_KHR_xlib_surface"},
+     {InstanceExt::AndroidSurface, "VK_KHR_android_surface"},
++    {InstanceExt::ViSurface, "VK_NN_vi_surface"},
+ 
+     {InstanceExt::DebugUtils, "VK_EXT_debug_utils"},
+     {InstanceExt::ValidationFeatures, "VK_EXT_validation_features"},
+@@ -102,6 +103,7 @@
+             case InstanceExt::Win32Surface:
+             case InstanceExt::XcbSurface:
+             case InstanceExt::XlibSurface:
++            case InstanceExt::ViSurface:
+                 hasDependencies = HasDep(InstanceExt::Surface);
+                 break;
+ 
+diff --git a/src/dawn/native/vulkan/VulkanExtensions.h b/src/dawn/native/vulkan/VulkanExtensions.h
+a/src/dawn/native/vulkan/VulkanExtensions.h b/src/dawn/native/vulkan/VulkanExtensions.h
+--- a/src/dawn/native/vulkan/VulkanExtensions.h
++++ b/src/dawn/native/vulkan/VulkanExtensions.h
+@@ -47,6 +47,7 @@
+     XcbSurface,
+     XlibSurface,
+     AndroidSurface,
++    ViSurface,
+ 
+     // Others
+     DebugUtils,
+diff --git a/src/dawn/native/vulkan/VulkanFunctions.cpp b/src/dawn/native/vulkan/VulkanFunctions.cpp
+a/src/dawn/native/vulkan/VulkanFunctions.cpp b/src/dawn/native/vulkan/VulkanFunctions.cpp
+--- a/src/dawn/native/vulkan/VulkanFunctions.cpp
++++ b/src/dawn/native/vulkan/VulkanFunctions.cpp
+@@ -35,6 +35,12 @@
+ 
+ namespace dawn::native::vulkan {
+ 
++#if DAWN_PLATFORM_IS(SWITCH)
++extern "C" {
++VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(VkInstance instance, const char* pName);
++}
++#endif  // DAWN_PLATFORM_IS(SWITCH)
++
+ namespace {
+ 
+ #if DAWN_NO_SANITIZE_VK_FN
+@@ -89,9 +95,18 @@
+     } while (0)
+ 
+ MaybeError VulkanFunctions::LoadGlobalProcs(const DynamicLib& vulkanLib) {
++#if DAWN_PLATFORM_IS(SWITCH)
++    (void)vulkanLib;
++    GetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
++        vk_icdGetInstanceProcAddr(VK_NULL_HANDLE, "vkGetInstanceProcAddr"));
++    if (GetInstanceProcAddr == nullptr) {
++        GetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(&vk_icdGetInstanceProcAddr);
++    }
++#else
+     if (!vulkanLib.GetProc(&GetInstanceProcAddr, "vkGetInstanceProcAddr")) {
+         return DAWN_INTERNAL_ERROR("Couldn't get vkGetInstanceProcAddr");
+     }
++#endif  // DAWN_PLATFORM_IS(SWITCH)
+ 
+     GET_GLOBAL_PROC(CreateInstance);
+     GET_GLOBAL_PROC(EnumerateInstanceExtensionProperties);
+@@ -204,6 +233,12 @@
+     }
+ #endif  // defined(DAWN_USE_X11)
+ 
++#if defined(VK_USE_PLATFORM_VI_NN)
++    if (globalInfo.HasExt(InstanceExt::ViSurface)) {
++        GET_INSTANCE_PROC(CreateViSurfaceNN);
++    }
++#endif  // defined(VK_USE_PLATFORM_VI_NN)
++
+     // Some device extensions expose instance procs to query information from the vkPhysicalDevice.
+     // Always try loading them as we don't know yet what extensions are available on the device.
+     // The more proper solution to load them only if the extension is available would require
+@@ -384,22 +404,47 @@
+     GET_DEVICE_PROC(WaitForFences);
+ 
+     // Promoted in 1.1
+-    GET_DEVICE_PROC(BindBufferMemory2);
+-    GET_DEVICE_PROC(BindImageMemory2);
+-    GET_DEVICE_PROC(CmdDispatchBase);
+-    GET_DEVICE_PROC(CmdSetDeviceMask);
+-    GET_DEVICE_PROC(CreateDescriptorUpdateTemplate);
+-    GET_DEVICE_PROC(CreateSamplerYcbcrConversion);
+-    GET_DEVICE_PROC(DestroyDescriptorUpdateTemplate);
+-    GET_DEVICE_PROC(DestroySamplerYcbcrConversion);
+-    GET_DEVICE_PROC(GetBufferMemoryRequirements2);
+-    GET_DEVICE_PROC(GetDescriptorSetLayoutSupport);
+-    GET_DEVICE_PROC(GetDeviceGroupPeerMemoryFeatures);
++    GET_DEVICE_PROC_ALIAS(BindBufferMemory2, BindBufferMemory2KHR);
++    GET_DEVICE_PROC_ALIAS(BindImageMemory2, BindImageMemory2KHR);
++    GET_DEVICE_PROC_ALIAS(CmdDispatchBase, CmdDispatchBaseKHR);
++    GET_DEVICE_PROC_ALIAS(CmdSetDeviceMask, CmdSetDeviceMaskKHR);
++#if DAWN_PLATFORM_IS(SWITCH)
++    GET_DEVICE_PROC_ALIAS_NO_ERROR(CreateDescriptorUpdateTemplate,
++                                   CreateDescriptorUpdateTemplateKHR);
++#else
++    GET_DEVICE_PROC_ALIAS(CreateDescriptorUpdateTemplate, CreateDescriptorUpdateTemplateKHR);
++#endif
++#if DAWN_PLATFORM_IS(SWITCH)
++    GET_DEVICE_PROC_ALIAS_NO_ERROR(CreateSamplerYcbcrConversion,
++                                   CreateSamplerYcbcrConversionKHR);
++#else
++    GET_DEVICE_PROC_ALIAS(CreateSamplerYcbcrConversion, CreateSamplerYcbcrConversionKHR);
++#endif
++#if DAWN_PLATFORM_IS(SWITCH)
++    GET_DEVICE_PROC_ALIAS_NO_ERROR(DestroyDescriptorUpdateTemplate,
++                                   DestroyDescriptorUpdateTemplateKHR);
++#else
++    GET_DEVICE_PROC_ALIAS(DestroyDescriptorUpdateTemplate, DestroyDescriptorUpdateTemplateKHR);
++#endif
++#if DAWN_PLATFORM_IS(SWITCH)
++    GET_DEVICE_PROC_ALIAS_NO_ERROR(DestroySamplerYcbcrConversion,
++                                   DestroySamplerYcbcrConversionKHR);
++#else
++    GET_DEVICE_PROC_ALIAS(DestroySamplerYcbcrConversion, DestroySamplerYcbcrConversionKHR);
++#endif
++    GET_DEVICE_PROC_ALIAS(GetBufferMemoryRequirements2, GetBufferMemoryRequirements2KHR);
++    GET_DEVICE_PROC_ALIAS(GetDescriptorSetLayoutSupport, GetDescriptorSetLayoutSupportKHR);
++    GET_DEVICE_PROC_ALIAS(GetDeviceGroupPeerMemoryFeatures, GetDeviceGroupPeerMemoryFeaturesKHR);
+     GET_DEVICE_PROC(GetDeviceQueue2);
+-    GET_DEVICE_PROC(GetImageMemoryRequirements2);
+-    GET_DEVICE_PROC(GetImageSparseMemoryRequirements2);
+-    GET_DEVICE_PROC(TrimCommandPool);
+-    GET_DEVICE_PROC(UpdateDescriptorSetWithTemplate);
++    GET_DEVICE_PROC_ALIAS(GetImageMemoryRequirements2, GetImageMemoryRequirements2KHR);
++    GET_DEVICE_PROC_ALIAS(GetImageSparseMemoryRequirements2, GetImageSparseMemoryRequirements2KHR);
++    GET_DEVICE_PROC_ALIAS(TrimCommandPool, TrimCommandPoolKHR);
++#if DAWN_PLATFORM_IS(SWITCH)
++    GET_DEVICE_PROC_ALIAS_NO_ERROR(UpdateDescriptorSetWithTemplate,
++                                   UpdateDescriptorSetWithTemplateKHR);
++#else
++    GET_DEVICE_PROC_ALIAS(UpdateDescriptorSetWithTemplate, UpdateDescriptorSetWithTemplateKHR);
++#endif
+ 
+     // Promoted in 1.2
+     if (deviceInfo.HasExt(DeviceExt::DrawIndirectCount)) {
+diff --git a/src/dawn/native/vulkan/VulkanFunctions.h b/src/dawn/native/vulkan/VulkanFunctions.h
+a/src/dawn/native/vulkan/VulkanFunctions.h b/src/dawn/native/vulkan/VulkanFunctions.h
+--- a/src/dawn/native/vulkan/VulkanFunctions.h
++++ b/src/dawn/native/vulkan/VulkanFunctions.h
+@@ -202,6 +198,11 @@
+     VkFn<PFN_vkGetPhysicalDeviceXcbPresentationSupportKHR>
+         GetPhysicalDeviceXcbPresentationSupportKHR = nullptr;
+ #endif  // defined(DAWN_USE_X11)
++
++#if defined(VK_USE_PLATFORM_VI_NN)
++    // NN_vi_surface
++    VkFn<PFN_vkCreateViSurfaceNN> CreateViSurfaceNN = nullptr;
++#endif  // defined(VK_USE_PLATFORM_VI_NN)
+ 
+     // ---------- Instance procs for device extensions
+ 
+diff --git a/src/dawn/utils/SystemUtils.cpp b/src/dawn/utils/SystemUtils.cpp
+a/src/dawn/utils/SystemUtils.cpp b/src/dawn/utils/SystemUtils.cpp
+--- a/src/dawn/utils/SystemUtils.cpp
++++ b/src/dawn/utils/SystemUtils.cpp
+@@ -33,6 +33,8 @@
+ #include "src/utils/windows_with_undefs.h"
+ #elif DAWN_PLATFORM_IS(POSIX)
+ #include <unistd.h>
++#elif DAWN_PLATFORM_IS(SWITCH)
++#include <time.h>
+ #else
+ #error "Unsupported platform."
+ #endif
+@@ -47,6 +49,14 @@
+ void USleep(unsigned int usecs) {
+     usleep(usecs);
+ }
++#elif DAWN_PLATFORM_IS(SWITCH)
++void USleep(unsigned int usecs) {
++    timespec req = {
++        static_cast<time_t>(usecs / 1000000),
++        static_cast<long>((usecs % 1000000) * 1000),
++    };
++    nanosleep(&req, nullptr);
++}
+ #else
+ #error "Implement USleep for your platform."
+ #endif
+diff --git a/src/utils/platform.h b/src/utils/platform.h
+a/src/utils/platform.h b/src/utils/platform.h
+--- a/src/utils/platform.h
++++ b/src/utils/platform.h
+@@ -49,6 +49,7 @@
+ //      - MACOS
+ //    - FUCHSIA
+ //    - EMSCRIPTEN
++//  - SWITCH
+ #if defined(_WIN32) || defined(_WIN64)
+ #include <winapifamily.h>
+ #define DAWN_PLATFORM_IS_WINDOWS 1
+@@ -94,6 +95,9 @@
+ #define DAWN_PLATFORM_IS_EMSCRIPTEN 1
+ #define DAWN_PLATFORM_IS_POSIX 1
+ #include <emscripten/emscripten.h>
++
++#elif defined(__SWITCH__)
++#define DAWN_PLATFORM_IS_SWITCH 1
+ 
+ #else
+ #error "Unsupported platform."
+@@ -241,6 +245,9 @@
+ #if !defined(DAWN_PLATFORM_IS_EMSCRIPTEN)
+ #define DAWN_PLATFORM_IS_EMSCRIPTEN 0
+ #endif
++#if !defined(DAWN_PLATFORM_IS_SWITCH)
++#define DAWN_PLATFORM_IS_SWITCH 0
++#endif
+ 
+ #if !defined(DAWN_PLATFORM_IS_X86)
+ #define DAWN_PLATFORM_IS_X86 0
+diff --git a/src/dawn/native/vulkan/VulkanFunctions.cpp b/src/dawn/native/vulkan/VulkanFunctions.cpp
+--- a/src/dawn/native/vulkan/VulkanFunctions.cpp
++++ b/src/dawn/native/vulkan/VulkanFunctions.cpp
+@@ -279,6 +279,25 @@
+             return DAWN_INTERNAL_ERROR(std::string("Couldn't get proc vk") + #name); \
+         }                                                                            \
+     } while (0)
+ 
++#define GET_DEVICE_PROC_ALIAS(name, alias)                                                   \
++    do {                                                                                      \
++        name = AsVkFn<PFN_vk##name>(GetDeviceProcAddr(device, "vk" #name));                   \
++        if (name == nullptr) {                                                                \
++            name = AsVkFn<PFN_vk##name>(GetDeviceProcAddr(device, "vk" #alias));              \
++        }                                                                                     \
++        if (name == nullptr) {                                                                \
++            return DAWN_INTERNAL_ERROR(std::string("Couldn't get proc vk") + #name + " or vk" + \
++                                       #alias);                                               \
++        }                                                                                     \
++    } while (0)
++
++#define GET_DEVICE_PROC_ALIAS_NO_ERROR(name, alias)                             \
++    do {                                                                        \
++        name = AsVkFn<PFN_vk##name>(GetDeviceProcAddr(device, "vk" #name));     \
++        if (name == nullptr) {                                                  \
++            name = AsVkFn<PFN_vk##name>(GetDeviceProcAddr(device, "vk" #alias)); \
++        }                                                                       \
++    } while (0)
+ MaybeError VulkanFunctions::LoadDeviceProcs(VkInstance instance,
+                                             VkDevice device,
+diff --git a/src/cmake/BundleLibraries.cmake b/src/cmake/BundleLibraries.cmake
+--- a/src/cmake/BundleLibraries.cmake
++++ b/src/cmake/BundleLibraries.cmake
+@@ -60,6 +60,9 @@ function(bundle_libraries output_target library_type)
+       endif()
+       elseif(NOT "${dependency}" STREQUAL "" AND NOT "${dependency}" STREQUAL "link_libraries-NOTFOUND")
+         # Collect non-target link dependencies (system/shared libraries, linker flags, etc.)
+-        list(APPEND all_non_target_libs ${dependency})
++        # SWITCH: newlib has no libdl
++        if(NOT (SWITCH AND ("${dependency}" STREQUAL "dl" OR "${dependency}" STREQUAL "-ldl")))
++          list(APPEND all_non_target_libs ${dependency})
++        endif()
+       endif()
+     endforeach()
+diff --git a/src/dawn/native/vulkan/BackendVk.cpp b/src/dawn/native/vulkan/BackendVk.cpp
+--- a/src/dawn/native/vulkan/BackendVk.cpp
++++ b/src/dawn/native/vulkan/BackendVk.cpp
+@@ -373,6 +373,14 @@ MaybeError VulkanInstance::Initialize(const InstanceBase* instance, ICD icd) {
+     switch (icd) {
++#if DAWN_PLATFORM_IS(SWITCH)
++        // On Switch the Vulkan driver (NXVK) is statically linked; there is
++        // nothing to dlopen. Function pointers come from
++        // vk_icdGetInstanceProcAddr (see LoadGlobalProcs).
++        case ICD::None: {
++            break;
++        }
++#else
+         case ICD::None: {
+             DAWN_TRY(LoadVulkan(kVulkanLibName));
+             // Succesfully loaded driver; break.
+             break;
+         }
++#endif
+         case ICD::SwiftShader: {

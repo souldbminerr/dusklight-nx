@@ -1,0 +1,83 @@
+diff --git a/absl/base/internal/sysinfo.cc b/absl/base/internal/sysinfo.cc
+index b103f49e..7288613c 100644
+--- a/absl/base/internal/sysinfo.cc
++++ b/absl/base/internal/sysinfo.cc
+@@ -472,6 +472,13 @@ pid_t GetTID() {
+   return static_cast<pid_t>(zx_thread_self());
+ }
+ 
++#elif defined(__SWITCH__)
++
++pid_t GetTID() {
++  const auto self = reinterpret_cast<uintptr_t>(pthread_self());
++  return static_cast<pid_t>(self ^ (self >> 32));
++}
++
+ #else
+ 
+ // Fallback implementation of `GetTID` using `pthread_self`.
+diff --git a/absl/base/internal/thread_identity.cc b/absl/base/internal/thread_identity.cc
+index 0471a25d..de247507 100644
+--- a/absl/base/internal/thread_identity.cc
++++ b/absl/base/internal/thread_identity.cc
+@@ -85,8 +85,8 @@ void SetCurrentThreadIdentity(ThreadIdentity* identity,
+                   reclaimer);
+ 
+ #if defined(__wasi__) || defined(__EMSCRIPTEN__) || defined(__MINGW32__) || \
+-    defined(__hexagon__)
+-  // Emscripten, WASI and MinGW pthread implementations do not support
++    defined(__hexagon__) || defined(__SWITCH__)
++  // Emscripten, WASI, MinGW, and libnx pthread implementations do not support
+   // signals. See
+   // https://kripken.github.io/emscripten-site/docs/porting/pthreads.html for
+   // more information.
+diff --git a/absl/container/internal/raw_hash_set.cc b/absl/container/internal/raw_hash_set.cc
+index d37c781f..35647bcb 100644
+--- a/absl/container/internal/raw_hash_set.cc
++++ b/absl/container/internal/raw_hash_set.cc
+@@ -80,14 +80,14 @@ void ValidateMaxCapacity(size_t capacity, size_t key_size, size_t slot_size) {
+ // Returns "random" seed.
+ inline size_t RandomSeed() {
+   constexpr size_t kIncrement = 0xad53;
+-#ifdef ABSL_HAVE_THREAD_LOCAL
++#if defined(ABSL_HAVE_THREAD_LOCAL) && !defined(__SWITCH__)
+   static thread_local size_t counter = 0;
+   counter += kIncrement;
+   size_t value = counter;
+-#else   // ABSL_HAVE_THREAD_LOCAL
++#else   // ABSL_HAVE_THREAD_LOCAL && !__SWITCH__
+   static std::atomic<size_t> counter(0);
+-  size_t value = counter.fetch_add(kIncrement, std::memory_order_relaxed);
+-#endif  // ABSL_HAVE_THREAD_LOCAL
++  size_t value = counter.fetch_add(kIncrement, std::memory_order_relaxed) + kIncrement;
++#endif  // ABSL_HAVE_THREAD_LOCAL && !__SWITCH__
+   return value ^ static_cast<size_t>(reinterpret_cast<uintptr_t>(&counter));
+ }
+ 
+diff --git a/absl/debugging/internal/elf_mem_image.h b/absl/debugging/internal/elf_mem_image.h
+index c8a10366..21e080c7 100644
+--- a/absl/debugging/internal/elf_mem_image.h
++++ b/absl/debugging/internal/elf_mem_image.h
+@@ -35,7 +35,7 @@
+ #if defined(__ELF__) && !defined(__OpenBSD__) && !defined(__QNX__) &&    \
+     !defined(__asmjs__) && !defined(__wasm__) && !defined(__HAIKU__) &&  \
+     !defined(__sun) && !defined(__VXWORKS__) && !defined(__hexagon__) && \
+-    !defined(__XTENSA__)
++    !defined(__XTENSA__) && !defined(__SWITCH__)
+ #define ABSL_HAVE_ELF_MEM_IMAGE 1
+ #endif
+ 
+diff --git a/absl/time/internal/cctz/src/time_zone_libc.cc b/absl/time/internal/cctz/src/time_zone_libc.cc
+index 362da1ab..423b900b 100644
+--- a/absl/time/internal/cctz/src/time_zone_libc.cc
++++ b/absl/time/internal/cctz/src/time_zone_libc.cc
+@@ -81,6 +81,9 @@ auto tm_zone(const std::tm& tm) -> decltype(tzname[0]) {
+   const bool is_dst = tm.tm_isdst > 0;
+   return tzname[is_dst];
+ }
++#elif defined(__SWITCH__)
++auto tm_gmtoff(const std::tm&) -> long { return 0; }
++auto tm_zone(const std::tm&) -> const char* { return "UTC"; }
+ #else
+ // Adapt to different spellings of the struct std::tm extension fields.
+ #if defined(tm_gmtoff)

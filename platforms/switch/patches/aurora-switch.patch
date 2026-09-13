@@ -1,0 +1,21 @@
+--- a/lib/dawn/BackendBinding.cpp
++++ b/lib/dawn/BackendBinding.cpp
+@@ -7,3 +7,7 @@
+ #if !defined(SDL_PLATFORM_MACOS) && !defined(SDL_PLATFORM_IOS) && !defined(SDL_PLATFORM_TVOS)
+ #include <SDL3/SDL_video.h>
+ #endif
++
++#if defined(SDL_PLATFORM_SWITCH)
++#include <switch.h>
++#endif
+@@ -27,4 +31,11 @@
+   desc->hwnd = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+   desc->hinstance = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER, nullptr);
+   return std::move(desc);
++#elif defined(SDL_PLATFORM_SWITCH)
++  // Dawn/Vulkan path never creates an SDL GL context
++  (void)props;
++  auto desc = std::make_shared<wgpu::SurfaceSourceSwitchNWindow>();
++  desc->window = nwindowGetDefault();
++  return desc;
+ #elif defined(SDL_PLATFORM_LINUX)

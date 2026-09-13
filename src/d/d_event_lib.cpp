@@ -32,7 +32,7 @@ bool dEvLib_callback_c::setEvent(int mapToolId, int eventIdx, int param_2) {
             eventIdx = dComIfGp_getEventManager().getEventIdx(mActor, static_cast<u16>(mapToolId));
         }
         mActor->eventInfo.setEventId(eventIdx);
-        _C = param_2;
+        mSubParam = param_2;
         return setAction(&l_startAction);
     }
 }
@@ -74,10 +74,10 @@ bool dEvLib_callback_c::executeStart() {
     if (!mActor->eventInfo.checkCommandDemoAccrpt()) {
         if (mActor->eventInfo.getMapToolId() != 0xFF) {
             fopAcM_orderMapToolEvent(mActor, mActor->eventInfo.getMapToolId(),
-                                     mActor->eventInfo.getEventId(), 0xFFFF, _C, 0);
+                                     mActor->eventInfo.getEventId(), 0xFFFF, mSubParam, 0);
         } else {
             fopAcM_orderOtherEventId(mActor, mActor->eventInfo.getEventId(),
-                                     mActor->eventInfo.getMapToolId(), 0xFFFF, 0, _C);
+                                     mActor->eventInfo.getMapToolId(), 0xFFFF, 0, mSubParam);
         }
         mActor->eventInfo.onCondition(2);
         return TRUE;

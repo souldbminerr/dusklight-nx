@@ -417,6 +417,61 @@
       }
     },
     {
+      "name": "switch-devkitA64-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/platforms/switch/cmake/DevkitA64Libnx.cmake",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install",
+        "DUSK_PLATFORM_SWITCH": {
+          "type": "BOOL",
+          "value": true
+        },
+        "DUSK_ENABLE_CODE_MODS": {
+          "type": "BOOL",
+          "value": false
+        },
+        "BOREALIS_HTTP_BACKEND": "none",
+        "BOREALIS_ENABLE_SENTRY": {
+          "type": "BOOL",
+          "value": false
+        },
+        "BOREALIS_ENABLE_DISCORD": {
+          "type": "BOOL",
+          "value": false
+        },
+        "BOREALIS_ENABLE_UPDATE": {
+          "type": "BOOL",
+          "value": false
+        },
+        "BOREALIS_ENABLE_CRASH": {
+          "type": "BOOL",
+          "value": false
+        },
+        "BOREALIS_ENABLE_WEBSOCKET": {
+          "type": "BOOL",
+          "value": false
+        }
+      }
+    },
+    {
+      "name": "switch-devkitA64-release",
+      "displayName": "Switch (devkitA64) Release",
+      "inherits": [
+        "relwithdebinfo",
+        "switch-devkitA64-base"
+      ]
+    },
+    {
+      "name": "switch-devkitA64-debug",
+      "displayName": "Switch (devkitA64) Debug",
+      "inherits": [
+        "debug",
+        "switch-devkitA64-base"
+      ]
+    },
+    {
       "name": "x-android-ci",
       "hidden": true,
       "inherits": [
@@ -650,6 +705,24 @@
       "configurePreset": "android-x86_64",
       "description": "Android x86_64 release build with debug info",
       "displayName": "Android x86_64 RelWithDebInfo",
+      "targets": [
+        "dusklight"
+      ]
+    },
+    {
+      "name": "switch-devkitA64-release",
+      "configurePreset": "switch-devkitA64-release",
+      "description": "Switch (devkitA64) release build",
+      "displayName": "Switch RelWithDebInfo",
+      "targets": [
+        "dusklight"
+      ]
+    },
+    {
+      "name": "switch-devkitA64-debug",
+      "configurePreset": "switch-devkitA64-debug",
+      "description": "Switch (devkitA64) debug build",
+      "displayName": "Switch Debug",
       "targets": [
         "dusklight"
       ]

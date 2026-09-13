@@ -531,7 +531,7 @@ void present_after_submit_trampoline(
         return;
     }
 
-    const bool presented = state->surface.Present();
+    const bool presented = static_cast<wgpu::Status>(state->surface.Present()) == wgpu::Status::Success;
     state->presentPending = false;
     state->currentView = {};
     state->currentTexture = {};
