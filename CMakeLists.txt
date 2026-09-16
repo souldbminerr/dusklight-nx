@@ -296,6 +296,7 @@ set(GAME_LIBS aurora::core aurora::gx aurora::gd aurora::si aurora::vi aurora::p
 if (DUSK_PLATFORM_SWITCH)
     # Native libnx replacements ship as same-named targets in platforms/switch.
     list(REMOVE_ITEM GAME_LIBS borealis::crash borealis::net)
+    list(APPEND GAME_COMPILE_DEFS DUSK_ASSET_DIR="romfs:/")
 endif ()
 if (DUSK_HAS_FUNCHOOK)
     list(APPEND GAME_LIBS funchook-static)

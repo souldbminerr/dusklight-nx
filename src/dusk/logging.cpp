@@ -45,6 +45,10 @@ void dusk::InitializeLogging(
     options.filePrefix = "dusklight";
     options.legacyFilePrefixes = {"dusk"};
     options.divert = &divert_stub_messages;
+#if defined(__SWITCH__)
+    // TODO: disable this
+    options.flushOn = borealis::LogLevel::Debug;
+#endif
     standard.apply_to(options);
     borealis::log::init(options);
 }

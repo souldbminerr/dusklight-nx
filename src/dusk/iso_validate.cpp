@@ -3,6 +3,7 @@
 #include <borealis/disc.hpp>
 
 #include <array>
+#include <atomic>
 #include <string_view>
 
 #include "dusk/logging.h"
@@ -114,10 +115,20 @@ void update_info(const borealis::disc::Result& result, DiscInfo& info) noexcept 
 }  // namespace
 
 ValidationError validate(const char* path, VerificationStatus& status, DiscInfo& info) {
+#ifdef __SWITCH__
+    // Only check header on HOS to avoid overhead and pain
+    const auto result = borealis::disc::inspect(
+        path == nullptr ? std::string_view{} : std::string_view{path}, DiscCatalog);
+    status.bytesRead.store(1, std::memory_order_relaxed);
+    status.bytesTotal.store(1, std::memory_order_relaxed);
+    update_info(result, info);
+    return validation_error(result.status);
+#else
     const auto result = borealis::disc::verify(
         path == nullptr ? std::string_view{} : std::string_view{path}, DiscCatalog, &status);
     update_info(result, info);
     return validation_error(result.status);
+#endif
 }
 
 ValidationError inspect(const char* path, DiscInfo& info) {

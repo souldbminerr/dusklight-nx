@@ -154,6 +154,7 @@ std::filesystem::path GetTempConfigJsonPath(const std::filesystem::path& configJ
 
 void ReplaceFile(const std::filesystem::path& source, const std::filesystem::path& target) {
     std::error_code ec;
+    std::filesystem::remove(target, ec);
     std::filesystem::rename(source, target, ec);
     if (ec) {
         const auto renameError = ec;

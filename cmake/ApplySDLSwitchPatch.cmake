@@ -40,7 +40,20 @@ else()
     OUTPUT_VARIABLE _apply_out
     ERROR_VARIABLE _apply_err
   )
-  if(NOT _apply_result EQUAL 0)
+  # GNU patch exits nonzero both when hunks genuinely fail (FAILED/malformed above)
+  # and when every hunk merely skips as already applied. Only the former is an
+  # error; the latter means the tree is complete (verify + stamp below).
+  if(NOT _apply_result EQUAL 0 AND (_apply_out MATCHES "FAILED|malformed"))
+    # Patch edits change the recorded hash, but GNU patch cannot re-apply a
+    # changed patch onto a tree holding the older revision (every hunk reads
+    # as reversed/skipped). Detect that case, wipe the populated tree so the
+    # next configure re-populates fresh, and stop with a clear rerun notice.
+    if(_apply_out MATCHES "previously applied")
+      get_filename_component(_sdl_deps_dir "${SDL_SOURCE_DIR}" DIRECTORY)
+      file(REMOVE_RECURSE "${SDL_SOURCE_DIR}" "${_sdl_deps_dir}/sdl-subbuild")
+      file(REMOVE "${SWITCH_STAMP_DIR}/${SWITCH_PATCH_HASH}.stamp")
+      message(FATAL_ERROR "ApplySDLSwitchPatch: sdl-src holds an older patch revision; wiped it. Re-run configure.")
+    endif()
     message(FATAL_ERROR "ApplySDLSwitchPatch: patch failed:\n${_apply_out}\n${_apply_err}\nDelete <build>/_deps/sdl-src and <build>/_deps/sdl-subbuild, then reconfigure.")
   endif()
   file(READ "${SDL_SOURCE_DIR}/CMakeLists.txt" _sdl_cmake_verify)

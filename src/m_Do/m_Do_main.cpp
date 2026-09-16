@@ -484,7 +484,9 @@ static void LanguageInit() {
 }
 
 static void log_build_info() {
+#ifndef __SWITCH__
     DuskLog.info("Build: {} (rev {}, built {}, type {})", BOREALIS_APP_DESCRIBE, BOREALIS_APP_REVISION, BOREALIS_APP_DATE, BOREALIS_BUILD_TYPE);
+#endif
     DuskLog.info("Platform: {}", BOREALIS_PLATFORM_NAME);
 }
 
@@ -538,6 +540,15 @@ static void mods_init(const std::filesystem::path& mods_dir) {
     dusk::mods::ModLoader::instance().init();
 }
 
+#if defined(__SWITCH__)
+namespace dusk::sw {
+bool require_full_takeover();
+void runtime_init();
+void log_line(const char* msg);
+void nvk_dispatch_fixup();
+}  // namespace dusk::sw
+#endif
+
 // =========================================================================
 // PC ENTRY POINT
 // =========================================================================
@@ -548,6 +559,16 @@ int game_main(int argc, char* argv[]) {
         return 0;
     }
     mainCalled = true;
+
+#if defined(__SWITCH__)
+    if (!dusk::sw::require_full_takeover()) {
+        return 0;
+    }
+
+    // (Re)create sdmc dirs now that the fs is mounted.
+    dusk::sw::runtime_init();
+    dusk::sw::nvk_dispatch_fixup();
+#endif
 
     cxxopts::ParseResult parsed_arg_options;
     borealis::cli::StandardOptions standardOptions;

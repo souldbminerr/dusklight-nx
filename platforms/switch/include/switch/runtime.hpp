@@ -6,4 +6,7 @@ void runtime_init();
 void runtime_exit();
 void log_line(const char* msg);
 
+bool require_full_takeover();
+
+
 }

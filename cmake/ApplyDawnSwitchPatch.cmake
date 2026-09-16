@@ -54,19 +54,19 @@ function(dusk_switch_apply_dawn_patch _dawn_src)
         "Revert Dawn sources manually: git -C <clone> checkout -- src")
     endif()
     execute_process(
-      COMMAND "${_git_exe}" -c core.autocrlf=false checkout -- src
+      COMMAND "${_git_exe}" -c core.autocrlf=false checkout -- src CMakeLists.txt
       WORKING_DIRECTORY "${_dawn_src}"
       RESULT_VARIABLE _co_result
       OUTPUT_VARIABLE _co_out
       ERROR_VARIABLE _co_err
     )
-    file(GLOB_RECURSE _rej_files "${_dawn_src}/src/*.rej")
+    file(GLOB_RECURSE _rej_files "${_dawn_src}/src/*.rej" "${_dawn_src}/*.rej")
     file(REMOVE ${_rej_files})
     if(NOT _co_result EQUAL 0)
       message(FATAL_ERROR "SwitchDawn: git checkout recovery failed:\n${_co_out}\n${_co_err}")
     endif()
     execute_process(
-      COMMAND "${_patch_exe}" -p1 --batch --no-backup-if-mismatch -i "${_patch}"
+      COMMAND "${_patch_exe}" -p1 --forward --batch --no-backup-if-mismatch -i "${_patch}"
       WORKING_DIRECTORY "${_dawn_src}"
       RESULT_VARIABLE _apply_result
       OUTPUT_VARIABLE _apply_out

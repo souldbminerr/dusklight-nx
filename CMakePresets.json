@@ -715,7 +715,8 @@
       "description": "Switch (devkitA64) release build",
       "displayName": "Switch RelWithDebInfo",
       "targets": [
-        "dusklight"
+        "dusklight",
+        "dusklight_nro"
       ]
     },
     {
@@ -724,7 +725,8 @@
       "description": "Switch (devkitA64) debug build",
       "displayName": "Switch Debug",
       "targets": [
-        "dusklight"
+        "dusklight",
+        "dusklight_nro"
       ]
     },
     {

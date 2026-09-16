@@ -83,6 +83,7 @@ add_library(dusk_switch_runtime STATIC
   source/switch_fs.cpp
   source/switch_perf.cpp
   source/switch_vulkan_nxvk.cpp
+  source/switch_nvk_dispatch.cpp
   source/switch_audio_audren.cpp
   source/switch_input_hid.cpp
   source/speedrun_switch.cpp
@@ -98,6 +99,22 @@ target_include_directories(dusk_switch_runtime PRIVATE
   "${CMAKE_SOURCE_DIR}/extern/aurora/include/dolphin"
 )
 
+if(NXVK_FOUND)
+  target_include_directories(dusk_switch_runtime PRIVATE ${NXVK_INCLUDE_DIRS})
+endif()
+
+# Generated Mesa headers (vk_dispatch_table.h, vk_common_entrypoints.h) for
+# name-based entrypoint lookup. Points at a configured NXVK build tree.
+set(NXVK_GENERATED_DIR "D:/l4t/nxvk/switch/build/cross" CACHE PATH
+  "Configured NXVK build tree (generated Vulkan headers)")
+if(EXISTS "${NXVK_GENERATED_DIR}/src/vulkan/util/vk_dispatch_table.h")
+  target_include_directories(dusk_switch_runtime PRIVATE
+    "${NXVK_GENERATED_DIR}/src/vulkan/util"
+    "${NXVK_GENERATED_DIR}/src/vulkan/runtime"
+    "${NXVK_GENERATED_DIR}/src/vulkan/wsi")
+else()
+  message(WARNING "SwitchNXVK: NXVK_GENERATED_DIR has no vk_dispatch_table.h; entrypoint lookup will not compile")
+endif()
 target_compile_features(dusk_switch_runtime PUBLIC cxx_std_20)
 # Same game headers/defs the game TUs see (dolphin types, TARGET_PC, ...).
 target_link_libraries(dusk_switch_runtime PRIVATE dusklight_game_headers)
@@ -261,10 +278,32 @@ endif()
 
 target_link_options(dusklight PRIVATE "-Wl,--gc-sections")
 
+if(NXVK_FOUND)
+  target_link_options(dusklight PRIVATE
+    "-Wl,--wrap=nvk_enumerate_physical_device"
+    "-Wl,--wrap=nvkmd_try_create_pdev"
+    "-Wl,--wrap=nak_compiler_create"
+    "-Wl,--wrap=nvk_init_wsi"
+    "-Wl,--wrap=wsi_device_init"
+    "-Wl,--wrap=vk_icdGetInstanceProcAddr"
+    "-Wl,--wrap=util_gpuvis_init"
+    "-Wl,--wrap=os_get_option"
+    "-Wl,--wrap=vk_instance_get_proc_addr_unchecked"
+    "-Wl,--wrap=parse_debug_string"
+    # Interposed NVK entrypoint tables (defined in switch_nvk_dispatch.cpp):
+    # internal driver consumers and proc lookups transparently use ours.
+    "-Wl,--wrap=nvk_physical_device_entrypoints"
+    "-Wl,--wrap=nvk_device_entrypoints"
+  )
+endif()
+
+set(_switch_romfs_dir "${CMAKE_CURRENT_BINARY_DIR}/romfs")
+file(COPY "${CMAKE_SOURCE_DIR}/res" DESTINATION "${_switch_romfs_dir}")
+
 switch_add_nro(dusklight
   TITLE "Dusklight"
   AUTHOR "Twilit Realm"
   VERSION "${BOREALIS_APP_VERSION}"
   ICON "${CMAKE_CURRENT_LIST_DIR}/icon.jpg"
+  ROMFSDIR "${_switch_romfs_dir}"
 )
-

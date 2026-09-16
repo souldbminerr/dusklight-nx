@@ -26,6 +26,9 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#ifdef __SWITCH__
+#include <cctype>
+#endif
 #include <array>
 #include <atomic>
 #include <exception>
@@ -770,6 +773,48 @@ void try_push_language_unavailable_modal(Document& host) {
     }));
 }
 
+#ifdef __SWITCH__
+// Find disk image as Horzion has no file picker
+std::string find_switch_disc_image() {
+  static constexpr const char* kExts[] = {".gcm", ".iso", ".gcz", ".rvz",
+                                          ".ciso", ".wbfs", ".wia", ".tgc",
+                                          ".nfs"};
+  std::error_code ec;
+  std::filesystem::directory_iterator it("sdmc:/switch/dusklight", ec);
+  if (ec) {
+    return {};
+  }
+  std::string best;
+  for (const auto& entry : it) {
+    if (!entry.is_regular_file(ec) || ec) {
+      continue;
+    }
+    std::string ext = entry.path().extension().string();
+    for (auto& c : ext) {
+      c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    }
+    bool wanted = false;
+    for (const char* want : kExts) {
+      if (ext == want) {
+        wanted = true;
+        break;
+      }
+    }
+    if (!wanted) {
+      continue;
+    }
+    std::string cand = entry.path().string();
+    if (entry.path().filename() == "game.gcm") {
+      return cand;
+    }
+    if (best.empty() || cand < best) {
+      best = cand;
+    }
+  }
+  return best;
+}
+#endif
+
 void ensure_initialized() noexcept {
     auto& state = prelaunch_state();
     if (state.initialized) {
@@ -785,6 +830,14 @@ void ensure_initialized() noexcept {
     state.initialCardFileType = getSettings().backend.cardFileType;
     state.errorString.clear();
     state.initialized = true;
+#ifdef __SWITCH__
+    if (state.configuredDiscPath.empty()) {
+      if (std::string autoDisc = find_switch_disc_image(); !autoDisc.empty()) {
+        PrelaunchLog.info("Auto-selecting Switch disc image");
+        begin_disc_verification(autoDisc);
+      }
+    }
+#endif
     refresh_configured_disc_state();
 }
 

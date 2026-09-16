@@ -919,7 +919,7 @@ diff --git a/src/cmake/BundleLibraries.cmake b/src/cmake/BundleLibraries.cmake
 diff --git a/src/dawn/native/vulkan/BackendVk.cpp b/src/dawn/native/vulkan/BackendVk.cpp
 --- a/src/dawn/native/vulkan/BackendVk.cpp
 +++ b/src/dawn/native/vulkan/BackendVk.cpp
-@@ -373,6 +373,14 @@ MaybeError VulkanInstance::Initialize(const InstanceBase* instance, ICD icd) {
+@@ -373,7 +373,16 @@ MaybeError VulkanInstance::Initialize(const InstanceBase* instance, ICD icd) {
      switch (icd) {
 +#if DAWN_PLATFORM_IS(SWITCH)
 +        // On Switch the Vulkan driver (NXVK) is statically linked; there is
@@ -936,3 +936,39 @@ diff --git a/src/dawn/native/vulkan/BackendVk.cpp b/src/dawn/native/vulkan/Backe
          }
 +#endif
          case ICD::SwiftShader: {
+diff --git a/src/dawn/native/vulkan/VulkanFunctions.cpp b/src/dawn/native/vulkan/VulkanFunctions.cpp
+--- a/src/dawn/native/vulkan/VulkanFunctions.cpp
++++ b/src/dawn/native/vulkan/VulkanFunctions.cpp
+@@ -110,7 +110,14 @@
+ 
+     GET_GLOBAL_PROC(CreateInstance);
+     GET_GLOBAL_PROC(EnumerateInstanceExtensionProperties);
++#if DAWN_PLATFORM_IS(SWITCH)
++    // Layers are unused on HOS
++    EnumerateInstanceLayerProperties = AsVkFn<PFN_vkEnumerateInstanceLayerProperties>(
++        GetInstanceProcAddr(nullptr, "vkEnumerateInstanceLayerProperties"));
++#else
+     GET_GLOBAL_PROC(EnumerateInstanceLayerProperties);
++#endif
++
+ 
+     // Is not available in Vulkan 1.0, so allow nullptr
+     EnumerateInstanceVersion = AsVkFn<PFN_vkEnumerateInstanceVersion>(
+diff --git a/src/dawn/native/vulkan/VulkanInfo.cpp b/src/dawn/native/vulkan/VulkanInfo.cpp
+--- a/src/dawn/native/vulkan/VulkanInfo.cpp
++++ b/src/dawn/native/vulkan/VulkanInfo.cpp
+@@ -94,5 +94,6 @@ ResultOrError<VulkanGlobalInfo> GatherGlobalInfo(const VulkanFunctions& vkFuncti
+ 
+     // Gather the info about the instance layers
++    if (vkFunctions.EnumerateInstanceLayerProperties != nullptr) {
+     {
+         uint32_t count = 0;
+         VkResult result =
+@@ -116,6 +117,7 @@ ResultOrError<VulkanGlobalInfo> GatherGlobalInfo(const VulkanFunctions& vkFuncti
+                 info.layers.set(it->second, true);
+             }
+         }
++    }
+     }
+ 
+     // Gather the info about the instance extensions

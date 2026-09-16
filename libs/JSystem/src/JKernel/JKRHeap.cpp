@@ -42,7 +42,9 @@ DUSK_GAME_DATA JKRHeap* JKRHeap::sSystemHeap;
 // We can't do this as we're (currently) using true OS threads. So use a true thread local.
 // On Linux/GCC, thread_local in a shared library requires global-dynamic TLS model
 // (the default local-exec is incompatible with -fPIC). MSVC and macOS/Clang handle this automatically.
-#if defined(__GNUC__) && !defined(__clang__) && !defined(_MSC_VER)
+#if defined(__SWITCH__)
+#define TLS_GLOBAL_DYNAMIC __attribute__((tls_model("initial-exec")))
+#elif defined(__GNUC__) && !defined(__clang__) && !defined(_MSC_VER)
 #define TLS_GLOBAL_DYNAMIC __attribute__((tls_model("global-dynamic")))
 #else
 #define TLS_GLOBAL_DYNAMIC

@@ -18,6 +18,7 @@ void ensure_data_root() {
 #ifdef __SWITCH__
   mkdir("sdmc:/switch", 0777);
   mkdir("sdmc:/switch/dusklight", 0777);
+  mkdir("sdmc:/switch/dusklight/cache", 0777);
 #else
   std::error_code ec;
   std::filesystem::create_directories(data_root(), ec);
