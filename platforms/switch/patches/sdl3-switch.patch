@@ -186,10 +186,10 @@ new file mode 100644
 index 000000000..3719c7e8f
 --- /dev/null
 +++ b/src/audio/switch/SDL_switchaudio.c
-@@ -0,0 +1,189 @@
+@@ -0,0 +1,267 @@
 +/*
 +  Simple DirectMedia Layer
-+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
++  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
 +
 +  This software is provided 'as-is', without any express or implied
 +  warranty.  In no event will the authors be held liable for any damages
@@ -208,183 +208,261 @@ index 000000000..3719c7e8f
 +  3. This notice may not be removed or altered from any source distribution.
 +*/
 +#include "SDL_internal.h"
++#define SWITCHAUDIO_DRIVER_NAME "switch"
++
++#include "../SDL_sysaudio.h"
 +
 +#ifdef SDL_AUDIO_DRIVER_SWITCH
 +
-+#include "../SDL_sysaudio.h"
++#include <malloc.h>
++
++
 +#include "SDL_switchaudio.h"
 +
-+#include <malloc.h> // memalign
-+#include <switch.h>
++static const AudioRendererConfig arConfig =
++    {
++        .output_rate     = AudioRendererOutputRate_48kHz,
++        .num_voices      = 24,
++        .num_effects     = 0,
++        .num_sinks       = 1,
++        .num_mix_objs    = 1,
++        .num_mix_buffers = 2,
++    };
 +
-+#define SWITCHAUDIO_DRIVER_NAME "switch"
-+
-+// libnx AUDOUT requires 0x1000-aligned buffers and sizes.
-+#define SWITCH_AUDIO_ALIGN 0x1000
-+#define ALIGN_UP(x, a) (((x) + ((a) - 1)) & ~((u64)(a) - 1))
-+
-+static bool SWITCHAUDIO_OpenDevice(SDL_AudioDevice *device)
++static bool
++SWITCHAUDIO_OpenDevice(SDL_AudioDevice *device)
 +{
-+    bool audout_inited = false;
-+    bool audout_started = false;
++    static const u8 sink_channels[] = {0, 1};
++    Result res;
++    int frames;
 +    u64 aligned;
-+    int i;
++    int mpid;
 +
-+    device->hidden = (struct SDL_PrivateAudioData *)SDL_calloc(1, sizeof(*device->hidden));
-+    if (!device->hidden) {
++    device->hidden = (struct SDL_PrivateAudioData *) SDL_calloc(1, sizeof(*device->hidden));
++    if (device->hidden == NULL) {
 +        return false;
 +    }
 +
-+    // AUDOUT is fixed at 48000 Hz, 2 channels, signed 16-bit little-endian.
-+    device->spec.freq = 48000;
++    res = audrenInitialize(&arConfig);
++    if (R_FAILED(res)) {
++        return SDL_SetError("audrenInitialize failed");
++    }
++    device->hidden->audr_device = true;
++
++    res = audrvCreate(&device->hidden->driver, &arConfig, 2);
++    if (R_FAILED(res)) {
++        return SDL_SetError("audrvCreate failed");
++    }
++    device->hidden->audr_driver = true;
++
++    device->spec.format = SDL_AUDIO_S16;
 +    device->spec.channels = 2;
-+    device->spec.format = SDL_AUDIO_S16LE;
++    device->spec.freq = 32000;
++    // Voice runs at the game DSP rate; the AudioRenderer resamples in hardware.
 +    SDL_UpdatedAudioDeviceFormat(device);
 +
-+    if (R_FAILED(audoutInitialize())) {
-+        SDL_SetError("audoutInitialize() failed");
++    frames = device->buffer_size / SDL_AUDIO_FRAMESIZE(device->spec);
++    aligned = ((u64)device->buffer_size * NUM_AUDIO_BUFFERS + 0xfff) & ~((u64)0xfff);
++    device->hidden->pool = memalign(0x1000, aligned);
++    if (!device->hidden->pool) {
++        SDL_SetError("Out of memory allocating voice pool");
 +        goto failed;
 +    }
-+    audout_inited = true;
-+
-+    if (R_FAILED(audoutStartAudioOut())) {
-+        SDL_SetError("audoutStartAudioOut() failed");
++    SDL_memset(device->hidden->pool, 0, (size_t)aligned);
++    for (int i = 0; i < NUM_AUDIO_BUFFERS; i++) {
++        device->hidden->buffer[i].data_raw = device->hidden->pool;
++        device->hidden->buffer[i].size = (u64)device->buffer_size;
++        device->hidden->buffer[i].start_sample_offset = (u64)(i * frames);
++        device->hidden->buffer[i].end_sample_offset = (u64)((i + 1) * frames);
++    }
++    device->hidden->buffer_tmp = (Uint8 *)SDL_malloc(device->buffer_size);
++    if (!device->hidden->buffer_tmp) {
 +        goto failed;
 +    }
-+    audout_started = true;
 +
-+    aligned = ALIGN_UP((u64)device->buffer_size, SWITCH_AUDIO_ALIGN);
-+    for (i = 0; i < NUM_AUDIO_BUFFERS; i++) {
-+        void *mem = memalign(SWITCH_AUDIO_ALIGN, aligned);
-+        if (!mem) {
-+            SDL_SetError("Out of memory allocating AUDOUT buffer");
-+            goto failed;
-+        }
-+        SDL_memset(mem, 0, aligned);
-+        device->hidden->buffers[i].next = NULL;
-+        device->hidden->buffers[i].buffer = mem;
-+        device->hidden->buffers[i].buffer_size = aligned;
-+        device->hidden->buffers[i].data_size = device->buffer_size;
-+        device->hidden->buffers[i].data_offset = 0;
++    mpid = audrvMemPoolAdd(&device->hidden->driver, device->hidden->pool, aligned);
++    audrvMemPoolAttach(&device->hidden->driver, mpid);
++
++    audrvDeviceSinkAdd(&device->hidden->driver, AUDREN_DEFAULT_DEVICE_NAME, 2, sink_channels);
++
++    res = audrenStartAudioRenderer();
++    if (R_FAILED(res)) {
++        return SDL_SetError("audrenStartAudioRenderer failed");
 +    }
 +
-+    device->hidden->mixbuf = (Uint8 *)SDL_malloc(device->buffer_size);
-+    if (!device->hidden->mixbuf) {
-+        goto failed;
++    audrvVoiceInit(&device->hidden->driver, 0, device->spec.channels, PcmFormat_Int16, device->spec.freq);
++    audrvVoiceSetDestinationMix(&device->hidden->driver, 0, AUDREN_FINAL_MIX_ID);
++    if (device->spec.channels == 1) {
++        audrvVoiceSetMixFactor(&device->hidden->driver, 0, 1.0f, 0, 0);
++        audrvVoiceSetMixFactor(&device->hidden->driver, 0, 1.0f, 0, 1);
 +    }
-+    SDL_memset(device->hidden->mixbuf, device->silence_value, device->buffer_size);
-+    device->hidden->next = 0;
++    else {
++        audrvVoiceSetMixFactor(&device->hidden->driver, 0, 1.0f, 0, 0);
++        audrvVoiceSetMixFactor(&device->hidden->driver, 0, 0.0f, 0, 1);
++        audrvVoiceSetMixFactor(&device->hidden->driver, 0, 0.0f, 1, 0);
++        audrvVoiceSetMixFactor(&device->hidden->driver, 0, 1.0f, 1, 1);
++    }
++
++    audrvVoiceStart(&device->hidden->driver, 0);
 +
 +    return true;
-+
 +failed:
-+    // Unwind any partial initialization so the device can be reopened cleanly.
-+    for (i = 0; i < NUM_AUDIO_BUFFERS; i++) {
-+        if (device->hidden->buffers[i].buffer) {
-+            free(device->hidden->buffers[i].buffer); // memalign() pairs with free()
-+            device->hidden->buffers[i].buffer = NULL;
-+        }
++    if (device->hidden->buffer_tmp) {
++        SDL_free(device->hidden->buffer_tmp);
++        device->hidden->buffer_tmp = NULL;
 +    }
-+    if (device->hidden->mixbuf) {
-+        SDL_free(device->hidden->mixbuf);
-+        device->hidden->mixbuf = NULL;
++    if (device->hidden->pool) {
++        free(device->hidden->pool);
++        device->hidden->pool = NULL;
 +    }
-+    if (audout_started) {
-+        audoutStopAudioOut();
++    if (device->hidden->audr_driver) {
++        audrvClose(&device->hidden->driver);
 +    }
-+    if (audout_inited) {
-+        audoutExit();
++    if (device->hidden->audr_device) {
++        audrenExit();
 +    }
 +    SDL_free(device->hidden);
 +    device->hidden = NULL;
 +    return false;
 +}
 +
-+static Uint8 *SWITCHAUDIO_GetDeviceBuf(SDL_AudioDevice *device, int *buffer_size)
++static bool
++SWITCHAUDIO_PlayDevice(SDL_AudioDevice *device, const Uint8 *buffer, int buflen)
 +{
-+    (void)buffer_size;
-+    return device->hidden->mixbuf;
-+}
++    (void)buflen;
++    int current = -1;
++    for (int i = 0; i < NUM_AUDIO_BUFFERS; i++) {
++        if (device->hidden->buffer[i].state == AudioDriverWaveBufState_Free
++            || device->hidden->buffer[i].state == AudioDriverWaveBufState_Done) {
++            current = i;
++            break;
++        }
++    }
 +
-+static bool SWITCHAUDIO_PlayDevice(SDL_AudioDevice *device, const Uint8 *buffer, int buflen)
-+{
-+    AudioOutBuffer *b = &device->hidden->buffers[device->hidden->next];
++    if (current >= 0) {
++        Uint8 *ptr = (Uint8 *) (device->hidden->pool + ((u64)current * (u64)device->buffer_size));
++        SDL_memcpy(ptr, buffer, (size_t)device->buffer_size);
++        armDCacheFlush(ptr, (u64)device->buffer_size);
++        audrvVoiceAddWaveBuf(&device->hidden->driver, 0, &device->hidden->buffer[current]);
++    }
++    else if (!audrvVoiceIsPlaying(&device->hidden->driver, 0)) {
++        audrvVoiceStart(&device->hidden->driver, 0);
++    }
 +
-+    SDL_memcpy(b->buffer, buffer, buflen);
-+    armDCacheFlush(b->buffer, b->buffer_size);
-+    b->data_size = (u64)buflen;
-+    device->hidden->next = (device->hidden->next + 1) % NUM_AUDIO_BUFFERS;
++    audrvUpdate(&device->hidden->driver);
 +
-+    if (R_FAILED(audoutAppendAudioOutBuffer(b))) {
-+        return SDL_SetError("audoutAppendAudioOutBuffer() failed");
++    if (current >= 0) {
++        while (device->hidden->buffer[current].state != AudioDriverWaveBufState_Playing) {
++            audrvUpdate(&device->hidden->driver);
++            audrenWaitFrame();
++        }
++    }
++    else {
++        current = -1;
++        for (int i = 0; i < NUM_AUDIO_BUFFERS; i++) {
++            if (device->hidden->buffer[i].state == AudioDriverWaveBufState_Playing) {
++                current = i;
++                break;
++            }
++        }
++        if (current < 0) {
++            audrenWaitFrame();
++            return true;
++        }
++        while (device->hidden->buffer[current].state == AudioDriverWaveBufState_Playing) {
++            audrvUpdate(&device->hidden->driver);
++            audrenWaitFrame();
++        }
 +    }
 +    return true;
 +}
 +
-+static bool SWITCHAUDIO_WaitDevice(SDL_AudioDevice *device)
++static bool
++SWITCHAUDIO_WaitDevice(SDL_AudioDevice *device)
 +{
-+    AudioOutBuffer *released = NULL;
-+    u32 released_count = 0;
-+    (void)device;
-+    if (R_FAILED(audoutWaitPlayFinish(&released, &released_count, UINT64_MAX))) {
-+        return SDL_SetError("audoutWaitPlayFinish() failed");
++    for (;;) {
++        for (int i = 0; i < NUM_AUDIO_BUFFERS; i++) {
++            if (device->hidden->buffer[i].state == AudioDriverWaveBufState_Free ||
++                device->hidden->buffer[i].state == AudioDriverWaveBufState_Done) {
++                return true;
++            }
++        }
++        audrvUpdate(&device->hidden->driver);
++        audrenWaitFrame();
 +    }
-+    return true;
 +}
 +
-+static void SWITCHAUDIO_CloseDevice(SDL_AudioDevice *device)
++static Uint8
++*SWITCHAUDIO_GetDeviceBuf(SDL_AudioDevice *device, int *buffer_size)
++{
++    if (buffer_size) {
++        *buffer_size = device->buffer_size;
++    }
++    return device->hidden->buffer_tmp;
++}
++
++static void
++SWITCHAUDIO_CloseDevice(SDL_AudioDevice *device)
 +{
 +    if (!device->hidden) {
 +        return;
 +    }
 +
-+    audoutStopAudioOut();
-+    audoutExit();
++    if (device->hidden->audr_driver) {
++        audrvClose(&device->hidden->driver);
++    }
 +
-+    for (int i = 0; i < NUM_AUDIO_BUFFERS; i++) {
-+        if (device->hidden->buffers[i].buffer) {
-+            free(device->hidden->buffers[i].buffer); // memalign() pairs with free()
-+            device->hidden->buffers[i].buffer = NULL;
-+        }
++    if (device->hidden->audr_device) {
++        audrenExit();
 +    }
-+    if (device->hidden->mixbuf) {
-+        SDL_free(device->hidden->mixbuf);
-+        device->hidden->mixbuf = NULL;
++
++    if (device->hidden->buffer_tmp) {
++        SDL_free(device->hidden->buffer_tmp);
++        device->hidden->buffer_tmp = NULL;
 +    }
++
++    if (device->hidden->pool) {
++        free(device->hidden->pool);
++        device->hidden->pool = NULL;
++    }
++
 +    SDL_free(device->hidden);
 +    device->hidden = NULL;
 +}
 +
-+static bool SWITCHAUDIO_Init(SDL_AudioDriverImpl *impl)
++static bool
++SWITCHAUDIO_Init(SDL_AudioDriverImpl *impl)
 +{
 +    impl->OpenDevice = SWITCHAUDIO_OpenDevice;
-+    impl->GetDeviceBuf = SWITCHAUDIO_GetDeviceBuf;
 +    impl->PlayDevice = SWITCHAUDIO_PlayDevice;
 +    impl->WaitDevice = SWITCHAUDIO_WaitDevice;
++    impl->GetDeviceBuf = SWITCHAUDIO_GetDeviceBuf;
 +    impl->CloseDevice = SWITCHAUDIO_CloseDevice;
++
 +    impl->OnlyHasDefaultPlaybackDevice = true;
 +    impl->HasRecordingSupport = false;
++
 +    return true;
 +}
 +
 +AudioBootStrap SWITCHAUDIO_bootstrap = {
 +    SWITCHAUDIO_DRIVER_NAME,
-+    "SDL Nintendo Switch (libnx AUDOUT) audio driver",
++    "SDL Nintendo Switch (libnx AUDREN/AUDRV) audio driver",
 +    SWITCHAUDIO_Init,
 +    false,
 +    false
 +};
 +
-+#endif // SDL_AUDIO_DRIVER_SWITCH
++#endif /* SDL_AUDIO_DRIVER_SWITCH */
 diff --git a/src/audio/switch/SDL_switchaudio.h b/src/audio/switch/SDL_switchaudio.h
 new file mode 100644
 index 000000000..185568c25
 --- /dev/null
 +++ b/src/audio/switch/SDL_switchaudio.h
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,40 @@
 +/*
 +  Simple DirectMedia Layer
-+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
++  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
 +
 +  This software is provided 'as-is', without any express or implied
 +  warranty.  In no event will the authors be held liable for any damages
@@ -402,24 +480,26 @@ index 000000000..185568c25
 +     misrepresented as being the original software.
 +  3. This notice may not be removed or altered from any source distribution.
 +*/
++
 +#ifndef SDL_switchaudio_h_
 +#define SDL_switchaudio_h_
 +
-+#include "SDL_internal.h"
++#include <switch.h>
 +#include "../SDL_sysaudio.h"
 +
-+#include <switch.h>
-+
-+#define NUM_AUDIO_BUFFERS 4
++#define NUM_AUDIO_BUFFERS 2
 +
 +struct SDL_PrivateAudioData
 +{
-+    Uint8 *mixbuf;                            // buffer SDL fills each iteration
-+    AudioOutBuffer buffers[NUM_AUDIO_BUFFERS]; // libnx AUDOUT buffer pool
-+    int next;                                  // next pool slot to submit
++    AudioDriver driver;
++    AudioDriverWaveBuf buffer[NUM_AUDIO_BUFFERS];
++    Uint8 *buffer_tmp;
++    void *pool;
++    bool audr_device;
++    bool audr_driver;
 +};
 +
-+#endif // SDL_switchaudio_h_
++#endif /* SDL_switchaudio_h_ */
 diff --git a/src/dynapi/SDL_dynapi.h b/src/dynapi/SDL_dynapi.h
 index 786d86ee4..fede93cf7 100644
 --- a/src/dynapi/SDL_dynapi.h
@@ -1224,3 +1304,76 @@ index 000000000..e4482155b
 +};
 +
 +#endif // SDL_switchvideo_h_
+diff --git a/src/audio/SDL_audiotypecvt.c b/src/audio/SDL_audiotypecvt.c
+--- a/src/audio/SDL_audiotypecvt.c
++++ b/src/audio/SDL_audiotypecvt.c
+@@ -721,33 +721,44 @@
+     fesetenv(&fenv);
+ }
+ 
+-static void SDL_Convert_F32_to_S16_NEON(Sint16 *dst, const float *src, int num_samples)
+-{
+-    LOG_DEBUG_AUDIO_CONVERT("F32", "S16 (using NEON)");
+-    fenv_t fenv;
+-    feholdexcept(&fenv);
+-
+-    CONVERT_16_FWD({
+-        vst1_lane_s16(&dst[i], vreinterpret_s16_s32(vcvt_n_s32_f32(vld1_dup_f32(&src[i]), 31)), 1);
+-    }, {
+-        float32x4_t floats0 = vld1q_f32(&src[i]);
+-        float32x4_t floats1 = vld1q_f32(&src[i + 4]);
+-        float32x4_t floats2 = vld1q_f32(&src[i + 8]);
+-        float32x4_t floats3 = vld1q_f32(&src[i + 12]);
+-
+-        int32x4_t ints0 = vcvtq_n_s32_f32(floats0, 31);
+-        int32x4_t ints1 = vcvtq_n_s32_f32(floats1, 31);
+-        int32x4_t ints2 = vcvtq_n_s32_f32(floats2, 31);
+-        int32x4_t ints3 = vcvtq_n_s32_f32(floats3, 31);
+-
+-        int16x8_t shorts0 = vcombine_s16(vshrn_n_s32(ints0, 16), vshrn_n_s32(ints1, 16));
+-        int16x8_t shorts1 = vcombine_s16(vshrn_n_s32(ints2, 16), vshrn_n_s32(ints3, 16));
+-
+-        vst1q_s16(&dst[i], shorts0);
+-        vst1q_s16(&dst[i + 8], shorts1);
+-    })
+-    fesetenv(&fenv);
+-}
++static void SDL_Convert_F32_to_S16_NEON(Sint16 *dst, const float *src, int num_samples)
++{
++    LOG_DEBUG_AUDIO_CONVERT("F32", "S16 (using NEON)");
++    fenv_t fenv;
++    feholdexcept(&fenv);
++
++    const float32x4_t clamp_hi = vdupq_n_f32(1.0f);
++    const float32x4_t clamp_lo = vdupq_n_f32(-1.0f);
++
++    CONVERT_16_FWD({
++        const float clamped = SDL_clamp(src[i], -1.0f, 1.0f);
++        vst1_lane_s16(&dst[i], vreinterpret_s16_s32(vcvt_n_s32_f32(vld1_dup_f32(&clamped), 31)), 1);
++    }, {
++        float32x4_t floats0 = vld1q_f32(&src[i]);
++        float32x4_t floats1 = vld1q_f32(&src[i + 4]);
++        float32x4_t floats2 = vld1q_f32(&src[i + 8]);
++        float32x4_t floats3 = vld1q_f32(&src[i + 12]);
++
++        floats0 = vmaxq_f32(vminq_f32(floats0, clamp_hi), clamp_lo);
++        floats1 = vmaxq_f32(vminq_f32(floats1, clamp_hi), clamp_lo);
++        floats2 = vmaxq_f32(vminq_f32(floats2, clamp_hi), clamp_lo);
++        floats3 = vmaxq_f32(vminq_f32(floats3, clamp_hi), clamp_lo);
++
++        int32x4_t ints0 = vcvtq_n_s32_f32(floats0, 31);
++        int32x4_t ints1 = vcvtq_n_s32_f32(floats1, 31);
++        int32x4_t ints2 = vcvtq_n_s32_f32(floats2, 31);
++        int32x4_t ints3 = vcvtq_n_s32_f32(floats3, 31);
++
++        int16x8_t shorts0 = vcombine_s16(vshrn_n_s32(ints0, 16), vshrn_n_s32(ints1, 16));
++        int16x8_t shorts1 = vcombine_s16(vshrn_n_s32(ints2, 16), vshrn_n_s32(ints3, 16));
++
++        vst1q_s16(&dst[i], shorts0);
++        vst1q_s16(&dst[i + 8], shorts1);
++    })
++    fesetenv(&fenv);
++}
+ 
+ static void SDL_Convert_F32_to_S32_NEON(Sint32 *dst, const float *src, int num_samples)
+ {

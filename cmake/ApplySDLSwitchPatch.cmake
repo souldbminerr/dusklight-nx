@@ -32,6 +32,9 @@ else()
     message(FATAL_ERROR "ApplySDLSwitchPatch: GNU patch not found. Install patch "
       "(msys2: pacman -S patch, or Git for Windows which ships usr/bin/patch.exe).")
   endif()
+  foreach(_f src/audio/switch/SDL_switchaudio.c src/audio/switch/SDL_switchaudio.h src/joystick/switch/SDL_sysjoystick.c src/video/switch/SDL_switchvideo.c src/video/switch/SDL_switchvideo.h)
+    file(REMOVE "${SDL_SOURCE_DIR}/${_f}")
+  endforeach()
   message(STATUS "ApplySDLSwitchPatch: applying sdl3-switch.patch with ${_patch_exe}")
   execute_process(
     COMMAND "${_patch_exe}" -p1 --forward --batch --no-backup-if-mismatch -i "${SWITCH_PATCH}"
