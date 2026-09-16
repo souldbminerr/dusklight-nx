@@ -27,7 +27,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/SwitchDeps.cmake)
 
 add_compile_definitions(DUSK_PLATFORM_SWITCH=1 TARGET_SWITCH=1 VK_USE_PLATFORM_VI_NN)
 
-# Tegra X1 opt flags
 set(DUSK_SWITCH_OPT_FLAGS
   -O3
   -ffunction-sections

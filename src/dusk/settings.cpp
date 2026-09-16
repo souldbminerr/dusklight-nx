@@ -7,6 +7,9 @@
 
 #include <aurora/aurora.h>
 #include <dolphin/vi.h>
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 
 namespace dusk {
 
@@ -226,8 +229,41 @@ UserSettings& getSettings() {
 }
 
 void applyInternalResolutionScale(int scale) {
+#ifdef __SWITCH__
+    if (scale <= 0) {
+        scale = lockedResolutionValueForHeight(
+            appletGetOperationMode() == AppletOperationMode_Console ? 1080 : 720);
+        if (scale <= 0) {
+            VISetFrameBufferScale(0.0f);
+            return;
+        }
+    }
+#endif
+    const int lockedHeight = lockedResolutionHeightForValue(scale);
+    if (lockedHeight > 0) {
+        VISetFrameBufferHeight(static_cast<uint32_t>(lockedHeight));
+        return;
+    }
     VISetFrameBufferScale(static_cast<float>(scale));
 }
+#ifdef __SWITCH__
+void pollDockedModeResolution() {
+    static int framesSinceCheck = 30;
+    static int lastMode = -1;
+    if (++framesSinceCheck < 30) {
+        return;
+    }
+    framesSinceCheck = 0;
+    const int mode = static_cast<int>(appletGetOperationMode());
+    if (mode == lastMode) {
+        return;
+    }
+    lastMode = mode;
+    if (getSettings().game.internalResolutionScale.getValue() == 0) {
+        applyInternalResolutionScale(0);
+    }
+}
+#endif
 
 void applyResampler(Resampler resampler) {
     switch (resampler) {

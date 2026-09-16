@@ -149,6 +149,9 @@ AuroraInfo auroraInfo;
 
 bool launchUILoop() {
     while (dusk::IsRunning && !dusk::IsGameLaunched) {
+#ifdef __SWITCH__
+        dusk::pollDockedModeResolution();
+#endif
         const AuroraEvent* event = aurora_update();
         while (event != nullptr && event->type != AURORA_NONE) {
             switch (event->type) {
@@ -278,6 +281,9 @@ void main01(void) {
 
         dusk::lastFrameAuroraStats = *aurora_get_stats();
         mDoGph_gInf_c::updateRenderSize();
+#ifdef __SWITCH__
+        dusk::pollDockedModeResolution();
+#endif
 
         dusk::ui::update();
 
@@ -727,6 +733,10 @@ int game_main(int argc, char* argv[]) {
         config.pauseOnFocusLost = dusk::getSettings().game.pauseOnFocusLost;
         config.imGuiInitCallback = &aurora_imgui_init_callback;
         config.allowTextureDumps = false;
+#ifdef __SWITCH__
+        // Cap filtering for reduced ram laod
+        config.maxTextureAnisotropy = 4;
+#endif
         auroraInfo = aurora_initialize(argc, argv, &config);
     }
 

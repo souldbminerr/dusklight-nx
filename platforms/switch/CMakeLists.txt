@@ -18,7 +18,7 @@ dusk_switch_patch_tracy()
 
 # sqlite amalgamation: no WAL/mmap on Switch; stub sys/mman.h for constants.
 if(TARGET sqlite3)
-  target_compile_definitions(sqlite3 PRIVATE SQLITE_OMIT_WAL=1 SQLITE_OMIT_LOAD_EXTENSION=1)
+  target_compile_definitions(sqlite3 PRIVATE SQLITE_OMIT_WAL=1 SQLITE_OMIT_LOAD_EXTENSION=1 SQLITE_OS_UNIX=1)
   target_include_directories(sqlite3 PRIVATE "${CMAKE_CURRENT_LIST_DIR}/compat")
 endif()
 
@@ -307,3 +307,20 @@ switch_add_nro(dusklight
   ICON "${CMAKE_CURRENT_LIST_DIR}/icon.jpg"
   ROMFSDIR "${_switch_romfs_dir}"
 )
+
+set(_switch_ofast_targets
+  dusklight dusk_internal
+  aurora_card aurora_core aurora_dvd aurora_gd aurora_gx aurora_main aurora_ms
+  aurora_mtx aurora_os aurora_pad aurora_si aurora_thp aurora_vi
+)
+foreach(_t IN LISTS _switch_ofast_targets)
+  if(TARGET ${_t})
+    target_compile_options(${_t} PRIVATE -O3)
+  endif()
+endforeach()
+unset(_switch_ofast_targets)
+foreach(_jsl IN LISTS JSYSTEM_LIBRARIES)
+  if(TARGET ${_jsl})
+    target_compile_options(${_jsl} PRIVATE -O3)
+  endif()
+endforeach()

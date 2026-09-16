@@ -40,6 +40,10 @@ const Rml::String kDocumentSource = R"RML(
 )RML";
 
 Rml::String format_internal_resolution(int value) {
+    const int lockedHeight = lockedResolutionHeightForValue(value);
+    if (lockedHeight > 0) {
+        return fmt::format("{}p", lockedHeight);
+    }
     u32 width = 0;
     u32 height = 0;
     AuroraGetRenderSize(&width, &height);
@@ -144,7 +148,7 @@ const GraphicsSetting& GraphicsSetting::of(GraphicsOption option) {
     switch (option) {
     case GraphicsOption::InternalResolution:
         return bind<[]() -> auto& { return getSettings().game.internalResolutionScale; }>(
-            0, 12, 0, 1, format_internal_resolution, true);
+            0, kInternalResolutionMax, 0, 1, format_internal_resolution, true);
     case GraphicsOption::ShadowResolution:
         return bind<[]() -> auto& { return getSettings().game.shadowResolutionMultiplier; }>(
             1, 8, 1, 1, format_times);

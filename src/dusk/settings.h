@@ -332,6 +332,28 @@ UserSettings& getSettings();
 void registerSettings();
 
 void applyInternalResolutionScale(int scale);
+
+inline constexpr int kLockedResolutionHeights[] = {540, 720, 900, 1080, 1440, 2160};
+inline constexpr int kInternalResolutionLockedFirst = 13;
+inline constexpr int kInternalResolutionMax = 18;
+inline int lockedResolutionHeightForValue(int value) {
+    const int index = value - kInternalResolutionLockedFirst;
+    if (index < 0 || index > kInternalResolutionMax - kInternalResolutionLockedFirst) {
+        return 0;
+    }
+    return kLockedResolutionHeights[index];
+}
+inline int lockedResolutionValueForHeight(int height) {
+    for (int i = 0; i <= kInternalResolutionMax - kInternalResolutionLockedFirst; ++i) {
+        if (kLockedResolutionHeights[i] == height) {
+            return kInternalResolutionLockedFirst + i;
+        }
+    }
+    return 0;
+}
+#ifdef __SWITCH__
+void pollDockedModeResolution();
+#endif
 void applyResampler(Resampler resampler);
 
 // Transient settings

@@ -6,11 +6,21 @@
 #include <borealis/log.hpp>
 
 #include <string>
+#include <system_error>
 
 namespace dusk::data {
 namespace {
 
 constexpr borealis::Log Log{"dusk::data"};
+#ifdef __SWITCH__
+constexpr char kSwitchCacheDir[] = "sdmc:/switch/dusklight/cache";
+
+std::filesystem::path switch_cache_path() {
+    std::error_code ec;
+    std::filesystem::create_directories(kSwitchCacheDir, ec);
+    return std::filesystem::path(kSwitchCacheDir);
+}
+#endif
 
 std::string status_message(const borealis::data::Status& status) {
     using enum borealis::data::ErrorCode;
@@ -128,7 +138,11 @@ Paths initialize_data(const std::filesystem::path& userDirectoryOverride) {
     if (!status) {
         Log.warn("{} Migration will be retried on the next launch.", status_message(status));
     }
-    return manager().paths();
+    auto paths = manager().paths();
+#ifdef __SWITCH__
+    paths.cachePath = switch_cache_path();
+#endif
+    return paths;
 }
 
 std::filesystem::path base_path_relative(const std::filesystem::path& path) {
@@ -140,7 +154,11 @@ std::filesystem::path configured_data_path() {
 }
 
 std::filesystem::path cache_path() {
+#ifdef __SWITCH__
+    return switch_cache_path();
+#else
     return manager().paths().cachePath;
+#endif
 }
 
 bool open_data_path() {

@@ -3,6 +3,7 @@
 #include <tracy/Tracy.hpp>
 
 #include <string_view>
+#include <system_error>
 
 bool StubLogEnabled = true;
 
@@ -40,15 +41,23 @@ bool divert_stub_messages(const borealis::log::Message& message) {
 void dusk::InitializeLogging(
     const std::filesystem::path& cacheDir, const borealis::cli::StandardOptions& standard) {
     borealis::log::Options options{};
-    options.level = borealis::LogLevel::Debug;
+    #if defined(__SWITCH__)
+        {
+            std::error_code flagEc;
+            if (std::filesystem::exists("sdmc:/switch/dusklight/log.flag", flagEc) || flagEc) {
+                options.level = borealis::LogLevel::Debug;
+                options.flushOn = borealis::LogLevel::Debug;
+            } else {
+                options.level = borealis::LogLevel::Error;
+                options.flushOn = borealis::LogLevel::Error;
+            }
+        }
+    #endif
+    
     options.fileDirectory = cacheDir.empty() ? std::filesystem::path{} : cacheDir / "logs";
     options.filePrefix = "dusklight";
     options.legacyFilePrefixes = {"dusk"};
     options.divert = &divert_stub_messages;
-#if defined(__SWITCH__)
-    // TODO: disable this
-    options.flushOn = borealis::LogLevel::Debug;
-#endif
     standard.apply_to(options);
     borealis::log::init(options);
 }

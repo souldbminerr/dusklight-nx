@@ -739,10 +739,10 @@ index 000000000..7e0c017ad
 +    out->b = (SDL_InputMapping){ EMappingKind_Button, 1 };
 +    out->x = (SDL_InputMapping){ EMappingKind_Button, 2 };
 +    out->y = (SDL_InputMapping){ EMappingKind_Button, 3 };
-+    out->leftshoulder = (SDL_InputMapping){ EMappingKind_Button, 4 };
-+    out->rightshoulder = (SDL_InputMapping){ EMappingKind_Button, 5 };
-+    out->lefttrigger = (SDL_InputMapping){ EMappingKind_Button, 6 };
-+    out->righttrigger = (SDL_InputMapping){ EMappingKind_Button, 7 };
++    out->leftshoulder = (SDL_InputMapping){ EMappingKind_Button, 6 };
++    out->rightshoulder = (SDL_InputMapping){ EMappingKind_Button, 7 };
++    out->lefttrigger = (SDL_InputMapping){ EMappingKind_Button, 4 };
++    out->righttrigger = (SDL_InputMapping){ EMappingKind_Button, 5 };
 +    out->back = (SDL_InputMapping){ EMappingKind_Button, 8 };
 +    out->start = (SDL_InputMapping){ EMappingKind_Button, 9 };
 +    out->leftstick = (SDL_InputMapping){ EMappingKind_Button, 10 };
