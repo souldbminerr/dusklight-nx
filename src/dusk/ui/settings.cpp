@@ -803,6 +803,10 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 .helpText = kResamplerHelpText,
             });
 
+        config_int_select(leftPane, rightPane, getSettings().game.maxTextureAnisotropy,
+            "Max Anisotropy",
+            "Caps anisotropic texture filtering. Lower values trade sharpness for performance.",
+            1, 16, 1, {}, {}, "x");
         leftPane.add_section("Post-Processing");
         graphics_tuner_control(*this, leftPane, rightPane,
             GraphicsTunerProps{

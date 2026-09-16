@@ -733,10 +733,10 @@ int game_main(int argc, char* argv[]) {
         config.pauseOnFocusLost = dusk::getSettings().game.pauseOnFocusLost;
         config.imGuiInitCallback = &aurora_imgui_init_callback;
         config.allowTextureDumps = false;
-#ifdef __SWITCH__
-        // Cap filtering for reduced ram laod
-        config.maxTextureAnisotropy = 4;
-#endif
+        {
+            const int aniso = dusk::getSettings().game.maxTextureAnisotropy.getValue();
+            config.maxTextureAnisotropy = static_cast<uint16_t>(aniso < 1 ? 1 : (aniso > 16 ? 16 : aniso));
+        }
         auroraInfo = aurora_initialize(argc, argv, &config);
     }
 

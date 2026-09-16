@@ -84,6 +84,11 @@ UserSettings g_userSettings = {
         .internalResolutionScale {"game.internalResolutionScale", 0},
         .shadowResolutionMultiplier {"game.shadowResolutionMultiplier", 1},
         .resampler {"game.resampler", Resampler::Bilinear},
+#ifdef __SWITCH__
+        .maxTextureAnisotropy {"game.maxTextureAnisotropy", 4},
+#else
+        .maxTextureAnisotropy {"game.maxTextureAnisotropy", 16},
+#endif
         .enableMapBackground {"game.enableMapBackground", true},
         .disableCutscenePillarboxing {"game.disableCutscenePillarboxing", false},
         .enableHighQualityMinimapTextures {"game.enableHighQualityMinimapTextures", true},
@@ -349,6 +354,7 @@ void registerSettings() {
     Register(g_userSettings.game.resampler,
         [](const Resampler& value, const Resampler&) { applyResampler(value); });
     Register(g_userSettings.game.shadowResolutionMultiplier);
+    Register(g_userSettings.game.maxTextureAnisotropy);
     Register(g_userSettings.game.enableMapBackground);
     Register(g_userSettings.game.disableCutscenePillarboxing);
     Register(g_userSettings.game.enableHighQualityMinimapTextures);

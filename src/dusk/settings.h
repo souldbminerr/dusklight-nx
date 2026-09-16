@@ -221,6 +221,7 @@ struct UserSettings {
         ConfigVar<int> internalResolutionScale;
         ConfigVar<int> shadowResolutionMultiplier;
         ConfigVar<Resampler> resampler;
+        ConfigVar<int> maxTextureAnisotropy;
         ConfigVar<bool> enableMapBackground;
         ConfigVar<bool> disableCutscenePillarboxing;
         ConfigVar<bool> enableHighQualityMinimapTextures;
