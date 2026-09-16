@@ -23,6 +23,9 @@
 #include <utility>
 #include <vector>
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 #include "switch/runtime.hpp"
 
 namespace dusk::sw::dvd {
@@ -805,6 +808,9 @@ public:
 
 private:
   void run() {
+#ifdef __SWITCH__
+    svcSetThreadCoreMask(threadGetCurHandle(), 1, 0x2);
+#endif
     std::unique_lock lk(m_mutex);
     while (true) {
       m_cv.wait(lk, [&] { return m_shutdown || !m_queue.empty(); });

@@ -147,10 +147,32 @@ s32 LOAD_COPYDATE(void*) {
 
 AuroraInfo auroraInfo;
 
+#ifdef __SWITCH__
+static void ensureSwitchControllerPort() {
+    static bool done = false;
+    if (done) {
+        return;
+    }
+    if (PADGetIndexForPort(PAD_CHAN0) >= 0) {
+        done = true;
+        return;
+    }
+    for (u32 i = 0, n = PADCount(); i < n; ++i) {
+        const char* name = PADGetNameForControllerIndex(i);
+        if (name != nullptr && std::strcmp(name, "Nintendo Switch Controller") == 0) {
+            PADSetPortForIndex(i, PAD_CHAN0);
+            done = true;
+            return;
+        }
+    }
+}
+#endif
+
 bool launchUILoop() {
     while (dusk::IsRunning && !dusk::IsGameLaunched) {
 #ifdef __SWITCH__
         dusk::pollDockedModeResolution();
+        ensureSwitchControllerPort();
 #endif
         const AuroraEvent* event = aurora_update();
         while (event != nullptr && event->type != AURORA_NONE) {
@@ -283,6 +305,7 @@ void main01(void) {
         mDoGph_gInf_c::updateRenderSize();
 #ifdef __SWITCH__
         dusk::pollDockedModeResolution();
+        ensureSwitchControllerPort();
 #endif
 
         dusk::ui::update();

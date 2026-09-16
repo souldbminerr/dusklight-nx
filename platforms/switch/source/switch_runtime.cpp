@@ -18,7 +18,7 @@ void log_line(const char* msg) {
 
 void runtime_init() {
 #ifdef __SWITCH__
-  svcSetThreadCoreMask(threadGetCurHandle(), 0, 0x3);
+  svcSetThreadCoreMask(threadGetCurHandle(), 0, 0x1);
 #endif
   ensure_data_root();
 }

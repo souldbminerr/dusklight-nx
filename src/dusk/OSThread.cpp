@@ -27,6 +27,9 @@
 #elif __APPLE__
 #include <pthread.h>
 #endif
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 
 // ============================================================================
 // Side-table: native thread data per OSThread
@@ -127,6 +130,9 @@ static OSSwitchThreadCallback sSwitchThreadCallback = nullptr;
 
 // Thread entry wrapper - runs on the new std::thread
 static void ThreadEntryWrapper(OSThread* thread, PCThreadData* data) {
+#ifdef __SWITCH__
+    svcSetThreadCoreMask(threadGetCurHandle(), 1, 0x2);
+#endif
     // Set thread-local pointer
     tls_currentThread = thread;
 
