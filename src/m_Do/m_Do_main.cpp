@@ -58,6 +58,7 @@
 #include "dusk/mouse.h"
 #include "dusk/os.h"
 #include "dusk/presentation.hpp"
+#include "dusk/profiler.hpp"
 #include "dusk/settings.h"
 #include "dusk/speedrun.h"
 #include "dusk/texture_replacements.hpp"
@@ -252,7 +253,9 @@ void main01(void) {
     dusk::game_clock::initialize();
 
     do {
+        DUSK_PROFILE_FRAME_BEGIN();
         // 1. Update Window Events
+        { DUSK_PROFILE("Events");
         const AuroraEvent* event = aurora_update();
         while (true) {
             switch (event->type) {
@@ -293,14 +296,18 @@ void main01(void) {
         }
 
         eventsDone:;
+        } // Events
 
+        { DUSK_PROFILE("Wait");
         if (!aurora_begin_frame()) {
             DuskLog.debug("aurora_begin_frame returned false, skipping draw this frame");
             continue;
         }
 
         VIWaitForRetrace();
+        } // Wait
 
+        { DUSK_PROFILE("UI");
         dusk::lastFrameAuroraStats = *aurora_get_stats();
         mDoGph_gInf_c::updateRenderSize();
 #ifdef __SWITCH__
@@ -309,12 +316,14 @@ void main01(void) {
 #endif
 
         dusk::ui::update();
+        } // UI
 
         const auto timing = dusk::game_clock::advance();
         if (timing.separatePresentation) {
             if (timing.numSimTicks > 0) {
                 dusk::interp::begin_frame(0.0f);
                 dusk::interp::set_ui_tick_pending(true);
+                { DUSK_PROFILE("Sim");
                 for (int i = 0; i < timing.numSimTicks; ++i) {
                     if (timing.interpolating) {
                         dusk::interp::begin_sim_tick();
@@ -324,17 +333,20 @@ void main01(void) {
                     dusk::mouse::read();
                     dusk::gyro::read(dusk::game_clock::kSimPeriod);
                     dusk::processGameCombos();
-                    fapGm_Execute();
+                    { DUSK_PROFILE("Execute"); fapGm_Execute(); }
                     dusk::processCameraCommands();
-                    mDoAud_Execute();
+                    { DUSK_PROFILE("Audio"); mDoAud_Execute(); }
                     dusk::game_clock::commit_sim_tick();
                 }
+                } // Sim
             }
 
             const float step = timing.interpolating ? dusk::game_clock::sample_interpolation_step() : 1.0f;
             dusk::interp::begin_presentation(step);
+            { DUSK_PROFILE("Draw");
             fpcM_DrawIterater((fpcM_DrawIteraterFunc)fpcM_Draw);
             cAPIGph_Painter();
+            } // Draw
             dusk::interp::end_presentation();
             dusk::interp::set_ui_tick_pending(false);
         } else {
@@ -348,16 +360,21 @@ void main01(void) {
             dusk::gyro::read(timing.dt);
             dusk::processGameCombos();
 
+            { DUSK_PROFILE("Sim");
             // EXECUTE GAME LOGIC & RENDER
             // This calls mDoGph_Painter -> JFWDisplay -> GX Functions
-            fapGm_Execute();
+            { DUSK_PROFILE("Execute"); fapGm_Execute(); }
             dusk::processCameraCommands();
 
-            mDoAud_Execute();
+            { DUSK_PROFILE("Audio"); mDoAud_Execute(); }
             dusk::game_clock::commit_sim_tick();
+            } // Sim
         }
 
+        { DUSK_PROFILE("Present");
         aurora_end_frame();
+        } // Present
+        DUSK_PROFILE_FRAME_END();
 
         FrameMark;
 

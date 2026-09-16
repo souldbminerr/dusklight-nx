@@ -315,6 +315,7 @@ struct UserSettings {
         ConfigVar<bool> checkForUpdates;
         ConfigVar<int> cardFileType;
         ConfigVar<bool> enableAdvancedSettings;
+        ConfigVar<bool> showProfilerOverlay;
     } backend;
 
     // Arrays of size 4 for 4 ports
