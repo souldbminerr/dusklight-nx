@@ -1,5 +1,4 @@
 #include "switch/nxvk.hpp"
-#include "switch/runtime.hpp"
 
 #include <cstdio>
 #include <cstring>

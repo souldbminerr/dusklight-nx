@@ -136,8 +136,8 @@ inline void endFrame() {
 
 } // namespace dusk::profiler
 
-#define DUSK_PROFILE(name)                                                                     \
+#define DUSK_PROFSCOPE(name)                                                                     \
     static int duskProfZone##__LINE__ = ::dusk::profiler::detail::registerZone(name);           \
     ::dusk::profiler::detail::ScopedZone duskProfScope##__LINE__(duskProfZone##__LINE__)
-#define DUSK_PROFILE_FRAME_BEGIN() ::dusk::profiler::beginFrame()
-#define DUSK_PROFILE_FRAME_END() ::dusk::profiler::endFrame()
+#define DUSK_PROF_FRAME_BEGIN() ::dusk::profiler::beginFrame()
+#define DUSK_PROF_FRAME_END() ::dusk::profiler::endFrame()

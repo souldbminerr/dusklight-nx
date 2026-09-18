@@ -180,22 +180,15 @@ namespace dusk {
                 fmt::format(FMT_STRING("Draw call count:   {}\n"), stats.drawCallCount));
             ImGuiStringViewText(fmt::format(FMT_STRING("Merged draw calls: {}\n"),
                 stats.mergedDrawCallCount));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Vertex size:       {}\n"),
-                BytesToString(stats.lastVertSize)));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Uniform size:      {}\n"),
-                BytesToString(stats.lastUniformSize)));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Index size:        {}\n"),
-                BytesToString(stats.lastIndexSize)));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Storage size:      {}\n"),
-                BytesToString(stats.lastStorageSize)));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Tex upload size:   {}\n"),
-                BytesToString(stats.lastTextureUploadSize)));
-            ImGuiStringViewText(fmt::format(
-                FMT_STRING("Total:             {}\n"),
-                BytesToString(stats.lastVertSize + stats.lastUniformSize +
-                    stats.lastIndexSize + stats.lastStorageSize +
-                    stats.lastTextureUploadSize)));
-
+            ImGuiStringViewText(fmt::format(FMT_STRING("BindGroup rebuilds: {}\n"),
+                stats.bindGroupRebuilds));
+            ImGuiStringViewText(fmt::format(FMT_STRING("Pipeline rebuilds:  {}\n"),
+                stats.pipelineRebuilds));
+            ImGuiStringViewText(fmt::format(FMT_STRING("Uniform rebuilds:   {}\n"),
+                stats.uniformRebuilds));
+            ImGuiStringViewText(fmt::format(FMT_STRING("Merge blk fmt/pipe/tex/uni: {}/{}/{}/{}\n"),
+                stats.mergeBlockedFmt, stats.mergeBlockedPipeline,
+                stats.mergeBlockedTextures, stats.mergeBlockedUniformOnly));
             ImGui::Separator();
 
             ImGuiStringViewText(fmt::format(FMT_STRING("CPU frame: avg {:.2f}ms p95 {:.2f}ms\n"),

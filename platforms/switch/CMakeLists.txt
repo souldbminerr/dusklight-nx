@@ -16,9 +16,7 @@ dusk_switch_patch_dawn_deps()
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/ApplyTracyPatch.cmake)
 dusk_switch_patch_tracy()
 
-# sqlite amalgamation: no WAL/mmap on Switch; stub sys/mman.h for constants.
 if(TARGET sqlite3)
-  target_compile_definitions(sqlite3 PRIVATE SQLITE_OMIT_WAL=1 SQLITE_OMIT_LOAD_EXTENSION=1 SQLITE_OS_UNIX=1)
   target_include_directories(sqlite3 PRIVATE "${CMAKE_CURRENT_LIST_DIR}/compat")
 endif()
 
@@ -77,7 +75,6 @@ endif()
 find_package(NXVK QUIET)
 
 add_library(dusk_switch_runtime STATIC
-  source/switch_runtime.cpp
   source/switch_posix_shim.cpp
   source/switch_egl_stub.cpp
   source/switch_fs.cpp
@@ -86,7 +83,6 @@ add_library(dusk_switch_runtime STATIC
   source/switch_nvk_dispatch.cpp
   source/switch_audio_audren.cpp
   source/switch_input_hid.cpp
-  source/speedrun_switch.cpp
 )
 
 target_include_directories(dusk_switch_runtime PUBLIC
@@ -174,15 +170,6 @@ if(NOT TARGET borealis_update)
   target_compile_options(borealis_update PRIVATE ${DUSK_SWITCH_OPT_FLAGS})
 endif()
 
-if(NOT TARGET borealis_presentation)
-  add_library(borealis_presentation STATIC source/borealis_presentation_switch.cpp)
-  add_library(borealis::presentation ALIAS borealis_presentation)
-  target_include_directories(borealis_presentation PUBLIC
-    "${CMAKE_SOURCE_DIR}/extern/borealis/include")
-  target_link_libraries(borealis_presentation PUBLIC borealis::core)
-  target_compile_features(borealis_presentation PUBLIC cxx_std_20)
-  target_compile_options(borealis_presentation PRIVATE ${DUSK_SWITCH_OPT_FLAGS})
-endif()
 
 if(NOT TARGET borealis_http)
   add_library(borealis_http STATIC source/borealis_http_switch.cpp)
@@ -194,25 +181,7 @@ if(NOT TARGET borealis_http)
   target_compile_options(borealis_http PRIVATE ${DUSK_SWITCH_OPT_FLAGS})
 endif()
 
-if(NOT TARGET borealis_net)
-  add_library(borealis_net STATIC source/borealis_net_switch.cpp)
-  add_library(borealis::net ALIAS borealis_net)
-  target_include_directories(borealis_net PUBLIC
-    "${CMAKE_SOURCE_DIR}/extern/borealis/include")
-  target_link_libraries(borealis_net PUBLIC borealis::core)
-  target_compile_features(borealis_net PUBLIC cxx_std_20)
-  target_compile_options(borealis_net PRIVATE ${DUSK_SWITCH_OPT_FLAGS})
-endif()
 
-if(NOT TARGET borealis_crash)
-  add_library(borealis_crash STATIC source/borealis_crash_switch.cpp)
-  add_library(borealis::crash ALIAS borealis_crash)
-  target_include_directories(borealis_crash PUBLIC
-    "${CMAKE_SOURCE_DIR}/extern/borealis/include")
-  target_link_libraries(borealis_crash PUBLIC borealis::core)
-  target_compile_features(borealis_crash PUBLIC cxx_std_20)
-  target_compile_options(borealis_crash PRIVATE ${DUSK_SWITCH_OPT_FLAGS})
-endif()
 
 if(NOT TARGET borealis_ws)
   add_library(borealis_ws STATIC source/borealis_ws_switch.cpp)
@@ -266,10 +235,18 @@ endif()
 # consumers (SDL/NXVK/...) land in GNU ld's single left-to-right pass.
 # (Spelled with raw -Wl flags: this bare-metal toolchain defines no
 # LINK_LIBRARY feature for CMake to expand.)
+if(NOT TARGET borealis_net)
+  add_library(borealis_net STATIC source/borealis_net_switch.cpp)
+  add_library(borealis::net ALIAS borealis_net)
+  target_include_directories(borealis_net PUBLIC
+    "${CMAKE_SOURCE_DIR}/extern/borealis/include")
+  target_link_libraries(borealis_net PUBLIC borealis::core)
+  target_compile_features(borealis_net PUBLIC cxx_std_20)
+  target_compile_options(borealis_net PRIVATE ${DUSK_SWITCH_OPT_FLAGS})
+endif()
+
 target_link_libraries(dusklight PRIVATE "-Wl,--whole-archive" dusk_switch_runtime "-Wl,--no-whole-archive")
-# borealis::net/crash were removed from GAME_LIBS on Switch; link our native
-# shims (same target names) explicitly.
-target_link_libraries(dusklight PRIVATE borealis::net borealis::crash)
+target_link_libraries(dusklight PRIVATE borealis::net)
 switch_target_link_libnx(dusklight)
 
 if(NXVK_FOUND)
@@ -302,7 +279,7 @@ file(COPY "${CMAKE_SOURCE_DIR}/res" DESTINATION "${_switch_romfs_dir}")
 
 switch_add_nro(dusklight
   TITLE "Dusklight"
-  AUTHOR "Twilit Realm"
+  AUTHOR "Twilit Realm and Souldbminer"
   VERSION "${BOREALIS_APP_VERSION}"
   ICON "${CMAKE_CURRENT_LIST_DIR}/icon.jpg"
   ROMFSDIR "${_switch_romfs_dir}"

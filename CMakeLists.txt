@@ -269,9 +269,8 @@ endif()
 include(files.cmake)
 
 if (DUSK_PLATFORM_SWITCH)
-    # livesplit needs BSD sockets (no netdb on Horizon); native no-op
-    # replacement lives in platforms/switch.
-    list(REMOVE_ITEM DUSK_FILES src/dusk/livesplit.cpp)
+    set_source_files_properties(${DOLZEL_FILES}
+        PROPERTIES COMPILE_OPTIONS "-Ofast;-fno-finite-math-only;-Wno-invalid-pch")
 endif ()
 
 # TODO: version handling for res includes
@@ -295,7 +294,7 @@ set(GAME_LIBS aurora::core aurora::gx aurora::gd aurora::si aurora::vi aurora::p
     Threads::Threads zstd::libzstd dusklight_game_headers picosha2 PNG::PNG)
 if (DUSK_PLATFORM_SWITCH)
     # Native libnx replacements ship as same-named targets in platforms/switch.
-    list(REMOVE_ITEM GAME_LIBS borealis::crash borealis::net)
+    list(REMOVE_ITEM GAME_LIBS borealis::crash borealis::net borealis::presentation)
     list(APPEND GAME_COMPILE_DEFS DUSK_ASSET_DIR="romfs:/")
 endif ()
 if (DUSK_HAS_FUNCHOOK)

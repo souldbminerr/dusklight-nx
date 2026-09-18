@@ -4,6 +4,8 @@
 #include "dusk/game_mode.hpp"
 #include "dusk/speedrun.h"
 
+/* Wont work on switch */
+
 namespace dusk::speedrun {
 void onGameFrame();
 uint64_t getFrameCount();

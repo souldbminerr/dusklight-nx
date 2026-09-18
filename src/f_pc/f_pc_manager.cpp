@@ -23,6 +23,7 @@
 
 #if TARGET_PC
 #include "dusk/game_clock.h"
+#include "dusk/profiler.hpp"
 
 #include <tracy/Tracy.hpp>
 #endif
@@ -72,7 +73,9 @@ void fpcM_Management(fpcM_ManagementFunc i_preExecuteFn, fpcM_ManagementFunc i_p
             if (!dusk::game_clock::g_frameTiming.separatePresentation)
 #endif
             {
+                { DUSK_PROFSCOPE("Painter");
                 cAPIGph_Painter();
+                }
             }
 
             if (!dPa_control_c::isStatus(1)) {
@@ -94,11 +97,15 @@ void fpcM_Management(fpcM_ManagementFunc i_preExecuteFn, fpcM_ManagementFunc i_p
             }
 
             if (!fapGm_HIO_c::isCaptureScreen()) {
+                { DUSK_PROFSCOPE("Actors");
                 fpcEx_Handler((fpcLnIt_QueueFunc)fpcM_Execute);
+                }
             }
 
             if (!fapGm_HIO_c::isCaptureScreen() || fapGm_HIO_c::getCaptureScreenDivH() != 1) {
+                { DUSK_PROFSCOPE("DrawRec");
                 fpcDw_Handler((fpcDw_HandlerFuncFunc)fpcM_DrawIterater, (fpcDw_HandlerFunc)fpcM_Draw);
+                }
             }
 
             IF_DUSK(dComIfGp_drawSimpleModel());

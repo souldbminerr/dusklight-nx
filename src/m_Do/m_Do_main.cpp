@@ -102,6 +102,11 @@
 #include <TargetConditionals.h>
 #endif
 
+#ifdef __SWITCH__
+#include <switch.h>
+#include <sys/stat.h>
+#endif
+
 // --- GLOBALS ---
 DUSK_GAME_DATA s8 mDoMain::developmentMode = -1;
 DUSK_GAME_DATA OSTime mDoMain::sPowerOnTime;
@@ -253,9 +258,9 @@ void main01(void) {
     dusk::game_clock::initialize();
 
     do {
-        DUSK_PROFILE_FRAME_BEGIN();
+        DUSK_PROF_FRAME_BEGIN();
         // 1. Update Window Events
-        { DUSK_PROFILE("Events");
+        { DUSK_PROFSCOPE("Events");
         const AuroraEvent* event = aurora_update();
         while (true) {
             switch (event->type) {
@@ -298,16 +303,18 @@ void main01(void) {
         eventsDone:;
         } // Events
 
-        { DUSK_PROFILE("Wait");
+        { DUSK_PROFSCOPE("Begin");
         if (!aurora_begin_frame()) {
             DuskLog.debug("aurora_begin_frame returned false, skipping draw this frame");
             continue;
         }
+        } // Begin
 
+        { DUSK_PROFSCOPE("VIWait");
         VIWaitForRetrace();
-        } // Wait
+        } // VIWait
 
-        { DUSK_PROFILE("UI");
+        { DUSK_PROFSCOPE("UI");
         dusk::lastFrameAuroraStats = *aurora_get_stats();
         mDoGph_gInf_c::updateRenderSize();
 #ifdef __SWITCH__
@@ -323,7 +330,7 @@ void main01(void) {
             if (timing.numSimTicks > 0) {
                 dusk::interp::begin_frame(0.0f);
                 dusk::interp::set_ui_tick_pending(true);
-                { DUSK_PROFILE("Sim");
+                { DUSK_PROFSCOPE("Sim");
                 for (int i = 0; i < timing.numSimTicks; ++i) {
                     if (timing.interpolating) {
                         dusk::interp::begin_sim_tick();
@@ -333,9 +340,9 @@ void main01(void) {
                     dusk::mouse::read();
                     dusk::gyro::read(dusk::game_clock::kSimPeriod);
                     dusk::processGameCombos();
-                    { DUSK_PROFILE("Execute"); fapGm_Execute(); }
+                    { DUSK_PROFSCOPE("Execute"); fapGm_Execute(); }
                     dusk::processCameraCommands();
-                    { DUSK_PROFILE("Audio"); mDoAud_Execute(); }
+                    { DUSK_PROFSCOPE("Audio"); mDoAud_Execute(); }
                     dusk::game_clock::commit_sim_tick();
                 }
                 } // Sim
@@ -343,7 +350,7 @@ void main01(void) {
 
             const float step = timing.interpolating ? dusk::game_clock::sample_interpolation_step() : 1.0f;
             dusk::interp::begin_presentation(step);
-            { DUSK_PROFILE("Draw");
+            { DUSK_PROFSCOPE("Draw");
             fpcM_DrawIterater((fpcM_DrawIteraterFunc)fpcM_Draw);
             cAPIGph_Painter();
             } // Draw
@@ -360,21 +367,21 @@ void main01(void) {
             dusk::gyro::read(timing.dt);
             dusk::processGameCombos();
 
-            { DUSK_PROFILE("Sim");
+            { DUSK_PROFSCOPE("Sim");
             // EXECUTE GAME LOGIC & RENDER
             // This calls mDoGph_Painter -> JFWDisplay -> GX Functions
-            { DUSK_PROFILE("Execute"); fapGm_Execute(); }
+            { DUSK_PROFSCOPE("Execute"); fapGm_Execute(); }
             dusk::processCameraCommands();
 
-            { DUSK_PROFILE("Audio"); mDoAud_Execute(); }
+            { DUSK_PROFSCOPE("Audio"); mDoAud_Execute(); }
             dusk::game_clock::commit_sim_tick();
             } // Sim
         }
 
-        { DUSK_PROFILE("Present");
+        { DUSK_PROFSCOPE("Present");
         aurora_end_frame();
         } // Present
-        DUSK_PROFILE_FRAME_END();
+        DUSK_PROF_FRAME_END();
 
         FrameMark;
 
@@ -588,11 +595,25 @@ static void mods_init(const std::filesystem::path& mods_dir) {
 
 #if defined(__SWITCH__)
 namespace dusk::sw {
-bool require_full_takeover();
-void runtime_init();
-void log_line(const char* msg);
 void nvk_dispatch_fixup();
+void nxvk_env_setup();
 }  // namespace dusk::sw
+
+extern "C" {
+u32 __nx_applet_type = AppletType_Application;
+size_t __nx_heap_size = 0;
+
+void userAppInit(void) {
+    romfsInit();
+    dusk::sw::nxvk_env_setup();
+    nvInitialize();
+}
+
+void userAppExit(void) {
+    nvExit();
+    romfsExit();
+}
+}  // extern "C"
 #endif
 
 // =========================================================================
@@ -607,12 +628,33 @@ int game_main(int argc, char* argv[]) {
     mainCalled = true;
 
 #if defined(__SWITCH__)
-    if (!dusk::sw::require_full_takeover()) {
+    if (appletGetAppletType() != AppletType_Application) {
+        consoleInit(NULL);
+        printf("Dusklight needs Title Takeover to run properly.\n\n");
+        printf("Hold R on a title to enter title override and run Dusklight or launch a forwarder if you have one,\n");
+        printf("Press PLUS to exit.\n");
+        consoleUpdate(NULL);
+        padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+        PadState pad;
+        padInitializeDefault(&pad);
+        while (appletMainLoop()) {
+            padUpdate(&pad);
+            if (padGetButtonsDown(&pad) & HidNpadButton_Plus) {
+            break;
+            }
+            consoleUpdate(NULL);
+        }
+        consoleExit(NULL);
         return 0;
     }
 
-    // (Re)create sdmc dirs now that the fs is mounted.
-    dusk::sw::runtime_init();
+    // Pin thread for optimal performance
+    svcSetThreadCoreMask(threadGetCurHandle(), 0, 0x1);
+    // Ensure directories exist
+    mkdir("sdmc:/switch", 0777);
+    mkdir("sdmc:/switch/dusklight", 0777);
+    mkdir("sdmc:/switch/dusklight/cache", 0777);
+    // NVK stuff
     dusk::sw::nvk_dispatch_fixup();
 #endif
 
@@ -716,7 +758,9 @@ int game_main(int argc, char* argv[]) {
         sentryOptions.attachments.emplace_back(logPath);
     }
     borealis::sentry::initialize(sentryOptions);
+#ifndef __SWITCH__
     borealis::crash::install();
+#endif
     // TODO: How to handle this?
     // PADSetDefaultMapping(&defaultPadMapping, PAD_TYPE_STANDARD);
 

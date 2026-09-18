@@ -26,7 +26,8 @@
 #ifdef __SWITCH__
 #include <switch.h>
 #endif
-#include "switch/runtime.hpp"
+#include <switch.h>
+#include <cstring>
 
 namespace dusk::sw::dvd {
 
@@ -37,7 +38,7 @@ void DVDLog(const char* fmt, ...) {
   va_start(ap, fmt);
   vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
-  dusk::sw::log_line(buf);
+  svcOutputDebugString(buf, strlen(buf));
 }
 
 

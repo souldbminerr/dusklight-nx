@@ -9,6 +9,7 @@
 namespace dusk::presentation {
 namespace {
 
+#ifndef __SWITCH__
 float preferred_frame_rate() {
     if (getTransientSettings().turboMode) {
         return 0.0f;
@@ -24,11 +25,13 @@ float preferred_frame_rate() {
         return 0.0f;
     }
 }
-
+#endif
 }  // namespace
 
 void update_frame_rate_preference() {
+#ifndef __SWITCH__
     borealis::presentation::set_preferred_frame_rate(preferred_frame_rate());
+#endif
 }
 
 }  // namespace dusk::presentation

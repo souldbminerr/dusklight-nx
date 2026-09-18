@@ -1,6 +1,8 @@
 #include "dusk/livesplit.h"
 
+#ifndef __SWITCH__
 #include "borealis/net.hpp"
+#endif
 
 #include "f_op/f_op_overlap_mng.h"
 
@@ -21,10 +23,13 @@ bool connectPending = false;
 bool disconnectPending = false;
 uint32_t reconnectCounter = 0;
 std::string storedEndpoint = "tcp://127.0.0.1:16834";
+#ifndef __SWITCH__
 std::unique_ptr<borealis::net::Context> netContext;
 borealis::net::SocketId socketId = 0;
+#endif
 
 void send_cmd(const char* command) {
+    #ifndef __SWITCH__
     if (!netContext || !connected || socketId == 0) {
         return;
     }
@@ -37,17 +42,21 @@ void send_cmd(const char* command) {
 
     const auto chars = std::span<const char>{message, static_cast<size_t>(length)};
     netContext->send(socketId, std::as_bytes(chars));
+    #endif
 }
 
 void reconnect() {
+    #ifndef __SWITCH__
     netContext.reset();
     netContext = std::make_unique<borealis::net::Context>();
     connected = false;
     connectPending = false;
     socketId = netContext->connect(storedEndpoint);
+    #endif
 }
 
 void poll_network() {
+    #ifndef __SWITCH__
     if (!netContext) {
         return;
     }
@@ -71,15 +80,21 @@ void poll_network() {
             reconnectCounter = 0;
         }
     }
+    #endif
 }
 
 }  // namespace
 
 uint64_t getFrameCount() {
+    #ifndef __SWITCH__
     return frameCount;
+    #else
+    return 0;
+    #endif
 }
 
 void onGameFrame() {
+    #ifndef __SWITCH__
     if (!running) {
         return;
     }
@@ -93,9 +108,11 @@ void onGameFrame() {
     if (!loading) {
         ++frameCount;
     }
+    #endif
 }
 
 void start() {
+    #ifndef __SWITCH__
     if (g_speedrunInfo.m_isRunStarted || running) {
         return;
     }
@@ -106,17 +123,21 @@ void start() {
     startPending = true;
     frameCount = 0;
     wasLoading = false;
+    #endif
 }
 
 void reset() {
+    #ifndef __SWITCH__
     running = false;
     startPending = false;
     frameCount = 0;
     wasLoading = false;
     send_cmd("reset");
+    #endif
 }
 
 void connectLiveSplit(const char* host, int port) {
+    #ifndef __SWITCH__
     std::string endpointHost = host;
     if (endpointHost.find(':') != std::string::npos &&
         !(endpointHost.starts_with('[') && endpointHost.ends_with(']')))
@@ -125,29 +146,41 @@ void connectLiveSplit(const char* host, int port) {
     }
     storedEndpoint = "tcp://" + endpointHost + ':' + std::to_string(port);
     reconnect();
+    #endif
 }
 
 void disconnectLiveSplit() {
+    #ifndef __SWITCH__
     netContext.reset();
     socketId = 0;
     connected = false;
     connectPending = false;
     disconnectPending = false;
+    #endif
 }
 
 bool consumeConnectedEvent() {
+    #ifndef __SWITCH__
     const bool value = connectPending;
     connectPending = false;
     return value;
+    #else
+    return false;
+    #endif
 }
 
 bool consumeDisconnectedEvent() {
+    #ifndef __SWITCH__
     const bool value = disconnectPending;
     disconnectPending = false;
     return value;
+    #else
+    return false;
+    #endif
 }
 
 void updateLiveSplit() {
+    #ifndef __SWITCH__
     poll_network();
     if (socketId == 0) {
         if ((reconnectCounter++ % 30) == 0) {
@@ -177,10 +210,13 @@ void updateLiveSplit() {
         static_cast<uint32_t>(totalSec / 3600), static_cast<uint32_t>((totalSec / 60) % 60),
         static_cast<uint32_t>(totalSec % 60), static_cast<uint32_t>(totalMs % 1000));
     send_cmd(command);
+    #endif
 }
 
 void shutdown() {
+    #ifndef __SWITCH__
     disconnectLiveSplit();
+    #endif
 }
 
 }  // namespace dusk::speedrun
