@@ -12,8 +12,10 @@
 #include <cstring>
 #include <filesystem>
 #include <limits>
+#include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -34,6 +36,7 @@ using s32 = std::int32_t;
 template <typename... A>
 inline void disc_warn(A&&...) {}
 
+constexpr u64 kDiscCacheMaxBytes = 128ULL * 1024 * 1024;
 constexpr u32 GCZ_MAGIC = 0xB10BC001;
 constexpr u32 CISO_MAGIC = 0x4F534943;
 constexpr u32 TGC_MAGIC = 0xA2380FAE;
@@ -226,10 +229,28 @@ public:
       const u64 blockOffset = offset % m_header.blockSize;
       const size_t copySize =
           static_cast<size_t>(std::min<u64>(m_header.blockSize - blockOffset, remaining));
-      if (!loadBlock(block)) {
-        return false;
+      const std::vector<u8>* data = findBlock(block);
+      if (data == nullptr) {
+        if (!loadBlock(block)) {
+          return false;
+        }
+        evictFor(m_scratch.size());
+        if (m_scratch.size() > kDiscCacheMaxBytes) {
+          return false;
+        }
+        auto it = m_lru.find(block);
+        if (it == m_lru.end()) {
+          BlockEntry entry;
+          entry.data = m_scratch;
+          entry.tick = ++m_lruTick;
+          it = m_lru.emplace(block, std::move(entry)).first;
+          m_lruBytes += it->second.data.size();
+        } else {
+          it->second.tick = ++m_lruTick;
+        }
+        data = &it->second.data;
       }
-      std::memcpy(outBytes, m_blockCache.data() + blockOffset, copySize);
+      std::memcpy(outBytes, data->data() + blockOffset, copySize);
       outBytes += copySize;
       offset += copySize;
       remaining -= copySize;
@@ -243,12 +264,31 @@ private:
   GczImageReader(FILE* file, const GczHeader& header, std::vector<u64> blockPointers)
       : FileImageReader(file), m_header(header), m_blockPointers(std::move(blockPointers)),
         m_dataOffset(sizeof(GczHeader) + m_blockPointers.size() * (sizeof(u64) + sizeof(u32))),
-        m_zlibBuffer(m_header.blockSize + 64), m_blockCache(m_header.blockSize) {}
+        m_zlibBuffer(m_header.blockSize + 64), m_scratch(m_header.blockSize) {}
+
+  const std::vector<u8>* findBlock(u64 block) {
+    auto it = m_lru.find(block);
+    if (it == m_lru.end()) {
+      return nullptr;
+    }
+    it->second.tick = ++m_lruTick;
+    return &it->second.data;
+  }
+
+  void evictFor(u64 need) {
+    while (!m_lru.empty() && m_lruBytes + need > kDiscCacheMaxBytes) {
+      auto oldest = m_lru.begin();
+      for (auto it = m_lru.begin(); it != m_lru.end(); ++it) {
+        if (it->second.tick < oldest->second.tick) {
+          oldest = it;
+        }
+      }
+      m_lruBytes -= oldest->second.data.size();
+      m_lru.erase(oldest);
+    }
+  }
 
   bool loadBlock(u64 block) {
-    if (block == m_cachedBlock) {
-      return true;
-    }
     if (block >= m_blockPointers.size()) {
       return false;
     }
@@ -271,12 +311,12 @@ private:
       if (compressedSize != m_header.blockSize) {
         return false;
       }
-      std::memcpy(m_blockCache.data(), m_zlibBuffer.data(), compressedSize);
+      std::memcpy(m_scratch.data(), m_zlibBuffer.data(), compressedSize);
     } else {
       z_stream stream{};
       stream.next_in = m_zlibBuffer.data();
       stream.avail_in = static_cast<uInt>(compressedSize);
-      stream.next_out = m_blockCache.data();
+      stream.next_out = m_scratch.data();
       stream.avail_out = m_header.blockSize;
       if (inflateInit(&stream) != Z_OK) {
         return false;
@@ -289,7 +329,6 @@ private:
       }
     }
 
-    m_cachedBlock = block;
     return true;
   }
 
@@ -297,8 +336,14 @@ private:
   std::vector<u64> m_blockPointers;
   u64 m_dataOffset = 0;
   std::vector<u8> m_zlibBuffer;
-  std::vector<u8> m_blockCache;
-  u64 m_cachedBlock = std::numeric_limits<u64>::max();
+  std::vector<u8> m_scratch;
+  struct BlockEntry {
+    std::vector<u8> data;
+    u64 tick = 0;
+  };
+  std::unordered_map<u64, BlockEntry> m_lru;
+  u64 m_lruTick = 0;
+  u64 m_lruBytes = 0;
 };
 
 class CisoImageReader final : public FileImageReader {
@@ -916,14 +961,32 @@ public:
     auto* outBytes = static_cast<u8*>(out);
     size_t remaining = length;
     while (remaining != 0) {
-      if (offset < m_cacheStart || offset >= m_cacheStart + m_cacheSize) {
+      const CacheEntry* hit = findEntry(offset);
+      if (hit == nullptr) {
         if (!loadGroupForOffset(offset)) {
           return false;
         }
+        evictFor(m_cacheSize);
+        if (m_cacheSize == 0 || m_cacheSize > kDiscCacheMaxBytes) {
+          return false;
+        }
+        CacheEntry entry;
+        entry.start = m_cacheStart;
+        entry.data.assign(m_cache.data(), m_cache.data() + m_cacheSize);
+        entry.tick = ++m_lruTick;
+        auto it = m_lru.find(m_cacheStart);
+        if (it != m_lru.end()) {
+          m_lruBytes -= it->second.data.size();
+          it->second = std::move(entry);
+        } else {
+          it = m_lru.emplace(m_cacheStart, std::move(entry)).first;
+        }
+        m_lruBytes += it->second.data.size();
+        hit = &it->second;
       }
-      const u64 cacheOffset = offset - m_cacheStart;
-      const size_t copySize = static_cast<size_t>(std::min<u64>(remaining, m_cacheSize - cacheOffset));
-      std::memcpy(outBytes, m_cache.data() + cacheOffset, copySize);
+      const u64 cacheOffset = offset - hit->start;
+      const size_t copySize = static_cast<size_t>(std::min<u64>(remaining, hit->data.size() - cacheOffset));
+      std::memcpy(outBytes, hit->data.data() + cacheOffset, copySize);
       outBytes += copySize;
       offset += copySize;
       remaining -= copySize;
@@ -960,6 +1023,38 @@ private:
     return decompressWia(compression, props, propsLen, compressed.data(), compressed.size(), static_cast<u8*>(out),
                          outSize, &actual) &&
            actual == outSize;
+  }
+
+  struct CacheEntry {
+    u64 start = 0;
+    std::vector<u8> data;
+    u64 tick = 0;
+  };
+
+  const CacheEntry* findEntry(u64 offset) {
+    auto it = m_lru.upper_bound(offset);
+    if (it == m_lru.begin()) {
+      return nullptr;
+    }
+    --it;
+    if (offset - it->first >= it->second.data.size()) {
+      return nullptr;
+    }
+    it->second.tick = ++m_lruTick;
+    return &it->second;
+  }
+
+  void evictFor(u64 need) {
+    while (!m_lru.empty() && m_lruBytes + need > kDiscCacheMaxBytes) {
+      auto oldest = m_lru.begin();
+      for (auto it = m_lru.begin(); it != m_lru.end(); ++it) {
+        if (it->second.tick < oldest->second.tick) {
+          oldest = it;
+        }
+      }
+      m_lruBytes -= oldest->second.data.size();
+      m_lru.erase(oldest);
+    }
   }
 
   bool findGroupInfoForSector(u32 sector, GroupInfo* out) const {
@@ -1109,6 +1204,9 @@ private:
   std::vector<u8> m_cache;
   u64 m_cacheStart = std::numeric_limits<u64>::max();
   u64 m_cacheSize = 0;
+  std::map<u64, CacheEntry> m_lru;
+  u64 m_lruTick = 0;
+  u64 m_lruBytes = 0;
 };
 
 std::unique_ptr<DiscImage> createDiscImage(const std::filesystem::path& imagePath) {
