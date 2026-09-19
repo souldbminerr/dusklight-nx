@@ -329,7 +329,6 @@ void main01(void) {
         if (timing.separatePresentation) {
             if (timing.numSimTicks > 0) {
                 dusk::interp::begin_frame(0.0f);
-                dusk::interp::set_ui_tick_pending(true);
                 { DUSK_PROFSCOPE("Sim");
                 for (int i = 0; i < timing.numSimTicks; ++i) {
                     if (timing.interpolating) {
@@ -355,10 +354,8 @@ void main01(void) {
             cAPIGph_Painter();
             } // Draw
             dusk::interp::end_presentation();
-            dusk::interp::set_ui_tick_pending(false);
         } else {
             dusk::interp::begin_frame(0.0f);
-            dusk::interp::set_ui_tick_pending(true);
             dusk::game_clock::begin_sim_tick();
 
             // Game Inputs

@@ -233,6 +233,14 @@ body.mirrored #menu-list button {
     text-align: right;
 }
 
+body.mirrored #menu-list button.mod-update-link {
+    justify-content: flex-end;
+}
+
+#menu-list update-badge {
+    font-size: var(--font-size-md);
+}
+
 disc-info {
     position: absolute;
     left: 96dp;
@@ -306,8 +314,6 @@ body.mirrored version-info {
     display: none;
     width: 24dp;
     height: 24dp;
-    font-family: var(--font-family-icons);
-    font-weight: normal;
     font-size: var(--font-size-4xl);
 }
 
@@ -384,8 +390,6 @@ update-status[state=available] #update-download {
     display: block;
     width: 18dp;
     height: 18dp;
-    font-family: var(--font-family-icons);
-    font-weight: normal;
     decorator: text("&#xe5c8;" center center);
 }
 
@@ -501,12 +505,20 @@ body.animate-in .intro-item {
         text-align: right;
     }
 
+    #menu-list button.mod-update-link {
+        justify-content: flex-end;
+    }
+
     body.mirrored #menu-list {
         align-items: flex-start;
     }
 
     body.mirrored #menu-list button {
         text-align: left;
+    }
+
+    body.mirrored #menu-list button.mod-update-link {
+        justify-content: flex-start;
     }
 
     eyebrow {
