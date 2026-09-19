@@ -1,6 +1,5 @@
 #include <cstddef>
 #include <cstdint>
-#include <switch/switch_disc_image.hpp>
 #include <aurora/dvd.h>
 #include <dolphin/dvd.h>
 #include <dolphin/types.h>
@@ -88,7 +87,6 @@ struct OverlayFileEntry {
 
 // ---- shared state (mirrors aurora dvd.cpp) ----
 std::string s_isoPath;
-std::unique_ptr<dusk::sw::disc::DiscImage> s_image;
 std::vector<FSTEntry> s_fstEntries;
 std::vector<FstIndex> s_entryNumToFstIndex;
 std::vector<u8> s_dolData;
@@ -426,16 +424,25 @@ u32 be32(const u8* p) {
 }
 
 bool isoPRead(u64 offset, void* out, size_t len) {
-  if (!s_isoOpen || out == nullptr || !s_image) {
+  if (!s_isoOpen || out == nullptr) {
     return false;
   }
   if (offset >= s_isoSize) {
     return len == 0;
   }
-  // Logical disc coordinates: the image reader resolves raw and container
-  // formats (ISO/GCM/GCZ/TGC/CISO/WBFS/WIA/RVZ) to the same byte stream.
   std::lock_guard lk(s_ioMutex);
-  return s_image->read(offset, out, len);
+  FILE* f = fopen(s_isoPath.c_str(), "rb");
+  if (f == nullptr) {
+    return false;
+  }
+#if defined(_WIN32)
+  _fseeki64(f, static_cast<__int64>(offset), SEEK_SET);
+#else
+  fseeko(f, static_cast<off_t>(offset), SEEK_SET);
+#endif
+  const size_t got = fread(out, 1, len, f);
+  fclose(f);
+  return got == len;
 }
 
 class CommandDataBase {
@@ -513,7 +520,6 @@ public:
 CommandDataRawFile* s_discRaw = nullptr;
 
 void clearState() {
-  s_image.reset();
   if (s_discRaw != nullptr) {
     delete s_discRaw;
     s_discRaw = nullptr;
@@ -1086,18 +1092,24 @@ bool aurora_dvd_open(const char* disc_path) {
 
   s_isoPath = disc_path;
   {
-    auto opened = dusk::sw::disc::open_disc_image(s_isoPath);
-    if (!opened.image) {
-      DVDLog("DVD: could not open disc image %s", s_isoPath.c_str());
+    FILE* probe = fopen(s_isoPath.c_str(), "rb");
+    if (probe == nullptr) {
       clearState();
       return false;
     }
-    s_image = std::move(opened.image);
-    s_isoSize = s_image->size();
-    if (s_isoSize <= static_cast<u64>(k_gcHeaderSize)) {
+#if defined(_WIN32)
+    _fseeki64(probe, 0, SEEK_END);
+    const long long size = _ftelli64(probe);
+#else
+    fseeko(probe, 0, SEEK_END);
+    const long long size = ftello(probe);
+#endif
+    fclose(probe);
+    if (size <= static_cast<long long>(k_gcHeaderSize)) {
       clearState();
       return false;
     }
+    s_isoSize = static_cast<u64>(size);
   }
   s_isoOpen = true;
 
