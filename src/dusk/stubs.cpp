@@ -987,9 +987,6 @@ void GXReadXfRasMetric(u32* xf_wait_in, u32* xf_wait_out, u32* ras_busy, u32* cl
     *clocks = 0;
 }
 
-void GXSetCopyClamp(GXFBClamp clamp) {
-    STUB_LOG();
-}
 OSThread* GXSetCurrentGXThread(void) {
     STUB_LOG();
     return NULL;

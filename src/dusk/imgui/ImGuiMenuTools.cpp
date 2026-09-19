@@ -189,6 +189,8 @@ namespace dusk {
             ImGuiStringViewText(fmt::format(FMT_STRING("Merge blk fmt/pipe/tex/uni: {}/{}/{}/{}\n"),
                 stats.mergeBlockedFmt, stats.mergeBlockedPipeline,
                 stats.mergeBlockedTextures, stats.mergeBlockedUniformOnly));
+            ImGuiStringViewText(fmt::format(FMT_STRING("Fifo worker: {:.2f}ms (tex {:.2f}ms)\n"),
+                stats.fifoWorkerUs / 1000.0, stats.fifoTexUs / 1000.0));
             ImGui::Separator();
 
             ImGuiStringViewText(fmt::format(FMT_STRING("CPU frame: avg {:.2f}ms p95 {:.2f}ms\n"),
