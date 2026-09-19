@@ -6,6 +6,14 @@
 #include <atomic>
 #include <string_view>
 
+#ifdef __SWITCH__
+#include <switch/switch_disc_image.hpp>
+
+#include <cstdint>
+#include <cstdio>
+#include <string>
+#endif
+
 #include "dusk/logging.h"
 #include "dusk/settings.h"
 
@@ -27,6 +35,8 @@ const char* verification_state_name(dusk::DiscVerificationState state) noexcept 
 
 namespace dusk::iso {
 namespace {
+
+
 
 constexpr auto AcceptedDiscs = std::to_array<borealis::disc::AcceptedDisc>({
     {
@@ -63,6 +73,100 @@ constexpr auto AcceptedDiscs = std::to_array<borealis::disc::AcceptedDisc>({
 
 constexpr auto RecognizedGameIds = std::to_array<std::string_view>({"RZDK01"});
 
+Region region_from_game_id(std::string_view gameId) noexcept {
+    if (gameId.size() >= 4) {
+        switch (gameId[3]) {
+        case 'P':
+            return Region::Europe;
+        case 'J':
+            return Region::Japan;
+        case 'K':
+            return Region::Korea;
+        default:
+            break;
+        }
+    }
+    return Region::NorthAmerica;
+}
+
+#ifdef __SWITCH__
+// Switch has no nod/Rust: validate through the platform disc image readers
+// (raw ISO plus GCZ/TGC/CISO/WBFS/WIA/RVZ) in logical disc coordinates.
+constexpr std::uint64_t kMinDiscSize = 16ULL * 1024 * 1024;
+constexpr std::uint32_t kGcMagic = 0xC2339F3Du;
+constexpr std::uint32_t kWiiMagic = 0x5D1C9EA3u;
+
+struct SwitchDiscHeader {
+  bool ok = false;
+  bool io_error = false;
+  Platform platform = Platform::Unknown;
+  std::string game_id;
+  std::uint8_t disc_number = 0;
+  std::uint8_t revision = 0;
+};
+
+std::uint32_t read_be32(const unsigned char* data) noexcept {
+  return (static_cast<std::uint32_t>(data[0]) << 24) |
+         (static_cast<std::uint32_t>(data[1]) << 16) |
+         (static_cast<std::uint32_t>(data[2]) << 8) | static_cast<std::uint32_t>(data[3]);
+}
+
+SwitchDiscHeader read_switch_header(const char* path) {
+  SwitchDiscHeader header;
+  if (path == nullptr || path[0] == 0) {
+    header.io_error = true;
+    return header;
+  }
+  auto opened = dusk::sw::disc::open_disc_image(path);
+  if (!opened.image || opened.image->size() < kMinDiscSize) {
+    FILE* probe = std::fopen(path, "rb");
+    header.io_error = probe == nullptr;
+    if (probe != nullptr) {
+      std::fclose(probe);
+    }
+    return header;
+  }
+  std::array<unsigned char, 0x20> hdr{};
+  if (!opened.image->read(0, hdr.data(), hdr.size())) {
+    return header;
+  }
+  if (read_be32(hdr.data() + 0x1C) == kGcMagic) {
+    header.platform = Platform::GameCube;
+  } else if (read_be32(hdr.data() + 0x18) == kWiiMagic) {
+    header.platform = Platform::Wii;
+  } else {
+    return header;
+  }
+  header.ok = true;
+  header.game_id = std::string(reinterpret_cast<const char*>(hdr.data()), 6);
+  header.disc_number = hdr[6];
+  header.revision = hdr[7];
+  return header;
+}
+
+ValidationError inspect_switch(const char* path, DiscInfo& info) {
+  const SwitchDiscHeader header = read_switch_header(path);
+  if (!header.ok) {
+    return header.io_error ? ValidationError::IOError : ValidationError::InvalidImage;
+  }
+  info.platform = header.platform;
+  info.region = region_from_game_id(header.game_id);
+  info.revision = header.revision;
+  info.gameId = header.game_id;
+  for (const auto& record : AcceptedDiscs) {
+    if (record.gameId == header.game_id && record.discNumber == header.disc_number &&
+        record.revision == header.revision) {
+      return ValidationError::Success;
+    }
+  }
+  for (const std::string_view id : RecognizedGameIds) {
+    if (id == header.game_id) {
+      return ValidationError::WrongVersion;
+    }
+  }
+  return ValidationError::WrongGame;
+}
+#else
 constexpr borealis::disc::Catalog DiscCatalog{
     .acceptedDiscs = AcceptedDiscs,
     .recognizedGameIds = RecognizedGameIds,
@@ -90,21 +194,7 @@ ValidationError validation_error(borealis::disc::Status status) noexcept {
     }
 }
 
-Region region_from_game_id(std::string_view gameId) noexcept {
-    if (gameId.size() >= 4) {
-        switch (gameId[3]) {
-        case 'P':
-            return Region::Europe;
-        case 'J':
-            return Region::Japan;
-        case 'K':
-            return Region::Korea;
-        default:
-            break;
-        }
-    }
-    return Region::NorthAmerica;
-}
+
 
 void update_info(const borealis::disc::Result& result, DiscInfo& info) {
     if (!result.metadata.gameId.empty()) {
@@ -115,17 +205,16 @@ void update_info(const borealis::disc::Result& result, DiscInfo& info) {
     }
 }
 
+#endif
+
 }  // namespace
 
 ValidationError validate(const char* path, VerificationStatus& status, DiscInfo& info) {
 #ifdef __SWITCH__
     // Only check header on HOS to avoid overhead and pain
-    const auto result = borealis::disc::inspect(
-        path == nullptr ? std::string_view{} : std::string_view{path}, DiscCatalog);
     status.bytesRead.store(1, std::memory_order_relaxed);
     status.bytesTotal.store(1, std::memory_order_relaxed);
-    update_info(result, info);
-    return validation_error(result.status);
+    return inspect_switch(path, info);
 #else
     const auto result = borealis::disc::verify(
         path == nullptr ? std::string_view{} : std::string_view{path}, DiscCatalog, &status);
@@ -135,10 +224,14 @@ ValidationError validate(const char* path, VerificationStatus& status, DiscInfo&
 }
 
 ValidationError inspect(const char* path, DiscInfo& info) {
+#ifdef __SWITCH__
+    return inspect_switch(path, info);
+#else
     const auto result = borealis::disc::inspect(
         path == nullptr ? std::string_view{} : std::string_view{path}, DiscCatalog);
     update_info(result, info);
     return validation_error(result.status);
+#endif
 }
 
 bool isPal(const char* path) {
