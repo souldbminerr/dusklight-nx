@@ -1240,6 +1240,14 @@ Rml::String native_button_name(SDL_Gamepad* gamepad, u32 buttonUntyped) {
     if (buttonUntyped == PAD_NATIVE_BUTTON_INVALID) {
         return "Not Bound";
     }
+#ifdef __SWITCH__
+    if (buttonUntyped == SDL_GAMEPAD_BUTTON_MISC1) {
+        return "L";
+    }
+    if (buttonUntyped == SDL_GAMEPAD_BUTTON_MISC2) {
+        return "R";
+    }
+#endif
 
     auto button = static_cast<SDL_GamepadButton>(buttonUntyped);
     if (gamepad != nullptr) {

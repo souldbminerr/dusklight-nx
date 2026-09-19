@@ -543,7 +543,7 @@ new file mode 100644
 index 000000000..7e0c017ad
 --- /dev/null
 +++ b/src/joystick/switch/SDL_sysjoystick.c
-@@ -0,0 +1,238 @@
+@@ -0,0 +1,242 @@
 +/*
 +  Simple DirectMedia Layer
 +  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
@@ -593,6 +593,8 @@ index 000000000..7e0c017ad
 +    HidNpadButton_Down,   // 13
 +    HidNpadButton_Left,   // 14
 +    HidNpadButton_Right,  // 15
++    HidNpadButton_L,      // 16 (digital mirror for gamepad MISC1)
++    HidNpadButton_R,      // 17 (digital mirror for gamepad MISC2)
 +};
 +#define NB_BUTTONS ((int)SDL_arraysize(button_map))
 +
@@ -742,6 +744,8 @@ index 000000000..7e0c017ad
 +    out->rightshoulder = (SDL_InputMapping){ EMappingKind_Button, 7 };
 +    out->lefttrigger = (SDL_InputMapping){ EMappingKind_Button, 4 };
 +    out->righttrigger = (SDL_InputMapping){ EMappingKind_Button, 5 };
++    out->misc1 = (SDL_InputMapping){ EMappingKind_Button, 16 };
++    out->misc2 = (SDL_InputMapping){ EMappingKind_Button, 17 };
 +    out->back = (SDL_InputMapping){ EMappingKind_Button, 8 };
 +    out->start = (SDL_InputMapping){ EMappingKind_Button, 9 };
 +    out->leftstick = (SDL_InputMapping){ EMappingKind_Button, 10 };
@@ -1306,7 +1310,7 @@ index 000000000..e4482155b
 diff --git a/src/audio/SDL_audiotypecvt.c b/src/audio/SDL_audiotypecvt.c
 --- a/src/audio/SDL_audiotypecvt.c
 +++ b/src/audio/SDL_audiotypecvt.c
-@@ -721,33 +721,44 @@
+@@ -721,33 +721,42 @@
      fesetenv(&fenv);
  }
  
