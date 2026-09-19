@@ -271,6 +271,7 @@ include(files.cmake)
 if (DUSK_PLATFORM_SWITCH)
     set_source_files_properties(${DOLZEL_FILES}
         PROPERTIES COMPILE_OPTIONS "-Ofast;-fno-finite-math-only;-Wno-invalid-pch")
+    set(CMAKE_PCH_WARN_INVALID OFF)
 endif ()
 
 # TODO: version handling for res includes
