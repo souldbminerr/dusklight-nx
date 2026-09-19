@@ -7,9 +7,11 @@
 #include "dusk/settings.h"
 
 #include <absl/container/flat_hash_map.h>
+#include <aurora/io.hpp>
 #include <borealis/io.hpp>
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
+#include <SDL3/SDL_error.h>
 
 #include <algorithm>
 #include <cmath>
@@ -144,23 +146,6 @@ std::optional<ui::ControlProps> parse_control_props(const json& value) {
 
 std::filesystem::path GetConfigJsonPath() {
     return ConfigPath / ConfigFileName;
-}
-
-std::filesystem::path GetTempConfigJsonPath(const std::filesystem::path& configJsonPath) {
-    auto tempPath = configJsonPath;
-    tempPath.replace_filename(fmt::format(".{}.tmp", configJsonPath.filename().string()));
-    return tempPath;
-}
-
-void ReplaceFile(const std::filesystem::path& source, const std::filesystem::path& target) {
-    std::error_code ec;
-    std::filesystem::remove(target, ec);
-    std::filesystem::rename(source, target, ec);
-    if (ec) {
-        const auto renameError = ec;
-        std::filesystem::remove(source, ec);
-        throw std::system_error(renameError);
-    }
 }
 
 template <typename T>
@@ -558,12 +543,16 @@ void save() {
         j[pair.first] = pair.second;
     }
 
+    std::string text;
     try {
-        const auto tempConfigJsonPath = GetTempConfigJsonPath(configJsonPath);
-        io::FileStream::WriteAllText(tempConfigJsonPath, j.dump(4));
-        ReplaceFile(tempConfigJsonPath, configJsonPath);
+        text = j.dump(4);
     } catch (const std::exception& e) {
         DuskConfigLog.error("Failed to save config to '{}': {}", configPathString, e.what());
+        return;
+    }
+    const auto bytes = std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+    if (!aurora::io::write_file_atomic(configJsonPath, bytes)) {
+        DuskConfigLog.error("Failed to save config to '{}': {}", configPathString, SDL_GetError());
     }
 }
 

@@ -198,6 +198,9 @@ std::optional<DiscVerificationResult> take_finished_disc_verification() {
 }
 
 void begin_update_check() {
+#ifdef __SWITCH__
+    return;
+#else
     if (!getSettings().backend.checkForUpdates.getValue()) {
         return;
     }
@@ -205,6 +208,7 @@ void begin_update_check() {
         return;
     }
     sUpdateCheck = borealis::update::check_latest_github_release(AppInfo);
+#endif
 }
 
 std::optional<borealis::update::Result> take_finished_update_check() {

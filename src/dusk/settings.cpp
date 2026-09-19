@@ -6,6 +6,7 @@
 #include "dusk/ui/ui.hpp"
 
 #include <aurora/aurora.h>
+#include <aurora/saltynx.h>
 #include <dolphin/vi.h>
 #ifdef __SWITCH__
 #include <switch.h>
@@ -239,11 +240,22 @@ UserSettings& getSettings() {
     return g_userSettings;
 }
 
+bool switch_is_docked() {
+#ifdef __SWITCH__
+    bool nxrtDocked = false;
+    if (aurora_saltynx_docked_override(&nxrtDocked)) {
+        return nxrtDocked;
+    }
+    return appletGetOperationMode() == AppletOperationMode_Console;
+#else
+    return false;
+#endif
+}
+
 void applyInternalResolutionScale(int scale) {
 #ifdef __SWITCH__
     if (scale <= 0) {
-        scale = lockedResolutionValueForHeight(
-            appletGetOperationMode() == AppletOperationMode_Console ? 1080 : 720);
+        scale = lockedResolutionValueForHeight(switch_is_docked() ? 1080 : 720);
         if (scale <= 0) {
             VISetFrameBufferScale(0.0f);
             return;
@@ -260,16 +272,16 @@ void applyInternalResolutionScale(int scale) {
 #ifdef __SWITCH__
 void pollDockedModeResolution() {
     static int framesSinceCheck = 30;
-    static int lastMode = -1;
+    static int lastDocked = -1;
     if (++framesSinceCheck < 30) {
         return;
     }
     framesSinceCheck = 0;
-    const int mode = static_cast<int>(appletGetOperationMode());
-    if (mode == lastMode) {
+    const int docked = switch_is_docked() ? 1 : 0;
+    if (docked == lastDocked) {
         return;
     }
-    lastMode = mode;
+    lastDocked = docked;
     if (getSettings().game.internalResolutionScale.getValue() == 0) {
         applyInternalResolutionScale(0);
     }

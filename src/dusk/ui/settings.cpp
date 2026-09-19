@@ -1618,11 +1618,13 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 .onChange = [](bool) { MenuBar::refresh_tabs(); },
                 .isDisabled = [] { return speedrun::isActive(); },
             });
+#if DUSK_PROFILER_ENABLED
         config_bool_select(leftPane, rightPane, getSettings().backend.showProfilerOverlay,
             {
                 .key = "Show Profiler Overlay",
                 .helpText = "Display a CPU profiler overlay. Only for developers!"
             });
+#endif
         config_bool_select(leftPane, rightPane, getSettings().game.showInputViewer,
             {
                 .key = "Show Input Viewer",

@@ -116,7 +116,9 @@ namespace dusk {
             }
 
             ImGui::MenuItem("Process Management", hotkeys::SHOW_PROCESS_MANAGEMENT, &m_showProcessManagement);
+#if DUSK_PROFILER_ENABLED
             ImGui::MenuItem("Debug Overlay", hotkeys::SHOW_DEBUG_OVERLAY, &m_showDebugOverlay);
+#endif
             ImGui::MenuItem("Heap Viewer", hotkeys::SHOW_HEAP_VIEWER, &m_showHeapOverlay);
             ImGui::MenuItem("Player Info", hotkeys::SHOW_PLAYER_INFO, &m_showPlayerInfo);
             ImGui::MenuItem("Debug Camera", hotkeys::SHOW_DEBUG_CAMERA, &m_showCameraOverlay);
@@ -138,6 +140,9 @@ namespace dusk {
     }
 
     void ImGuiMenuTools::ShowDebugOverlay() {
+#if !DUSK_PROFILER_ENABLED
+        return;
+#endif
         if (getSettings().backend.showProfilerOverlay) {
             m_showDebugOverlay = true;
         } else if (!getSettings().backend.enableAdvancedSettings ||
@@ -189,8 +194,7 @@ namespace dusk {
             ImGuiStringViewText(fmt::format(FMT_STRING("Merge blk fmt/pipe/tex/uni: {}/{}/{}/{}\n"),
                 stats.mergeBlockedFmt, stats.mergeBlockedPipeline,
                 stats.mergeBlockedTextures, stats.mergeBlockedUniformOnly));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Fifo worker: {:.2f}ms (tex {:.2f}ms)\n"),
-                stats.fifoWorkerUs / 1000.0, stats.fifoTexUs / 1000.0));
+            
             ImGui::Separator();
 
             ImGuiStringViewText(fmt::format(FMT_STRING("CPU frame: avg {:.2f}ms p95 {:.2f}ms\n"),
