@@ -1247,6 +1247,12 @@ Rml::String native_button_name(SDL_Gamepad* gamepad, u32 buttonUntyped) {
     if (buttonUntyped == SDL_GAMEPAD_BUTTON_MISC2) {
         return "R";
     }
+    if (buttonUntyped == SDL_GAMEPAD_BUTTON_MISC3) {
+        return "ZL";
+    }
+    if (buttonUntyped == SDL_GAMEPAD_BUTTON_MISC4) {
+        return "ZR";
+    }
 #endif
 
     auto button = static_cast<SDL_GamepadButton>(buttonUntyped);

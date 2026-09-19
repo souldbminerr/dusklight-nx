@@ -543,7 +543,7 @@ new file mode 100644
 index 000000000..7e0c017ad
 --- /dev/null
 +++ b/src/joystick/switch/SDL_sysjoystick.c
-@@ -0,0 +1,242 @@
+@@ -0,0 +1,246 @@
 +/*
 +  Simple DirectMedia Layer
 +  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
@@ -595,6 +595,8 @@ index 000000000..7e0c017ad
 +    HidNpadButton_Right,  // 15
 +    HidNpadButton_L,      // 16 (digital mirror for gamepad MISC1)
 +    HidNpadButton_R,      // 17 (digital mirror for gamepad MISC2)
++    HidNpadButton_ZL,     // 18 (digital mirror for gamepad MISC3)
++    HidNpadButton_ZR,     // 19 (digital mirror for gamepad MISC4)
 +};
 +#define NB_BUTTONS ((int)SDL_arraysize(button_map))
 +
@@ -746,6 +748,8 @@ index 000000000..7e0c017ad
 +    out->righttrigger = (SDL_InputMapping){ EMappingKind_Button, 5 };
 +    out->misc1 = (SDL_InputMapping){ EMappingKind_Button, 16 };
 +    out->misc2 = (SDL_InputMapping){ EMappingKind_Button, 17 };
++    out->misc3 = (SDL_InputMapping){ EMappingKind_Button, 18 };
++    out->misc4 = (SDL_InputMapping){ EMappingKind_Button, 19 };
 +    out->back = (SDL_InputMapping){ EMappingKind_Button, 8 };
 +    out->start = (SDL_InputMapping){ EMappingKind_Button, 9 };
 +    out->leftstick = (SDL_InputMapping){ EMappingKind_Button, 10 };
