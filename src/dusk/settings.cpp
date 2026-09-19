@@ -84,6 +84,7 @@ UserSettings g_userSettings = {
         .disableWaterRefraction {"game.disableWaterRefraction", false},
         .enableTextureReplacements {"game.enableTextureReplacements", true},
         .enableFrameInterpolation {"game.enableFrameInterpolation", FrameInterpMode::Off},
+        .interpolationQuality {"game.interpolationQuality", InterpQuality::Fast},
         .internalResolutionScale {"game.internalResolutionScale", 0},
         .shadowResolutionMultiplier {"game.shadowResolutionMultiplier", 1},
         .resampler {"game.resampler", Resampler::Bilinear},
@@ -419,6 +420,7 @@ void registerSettings() {
     Register(g_userSettings.game.easyQuickSpin);
 
     Register(g_userSettings.game.enableFrameInterpolation);
+    Register(g_userSettings.game.interpolationQuality);
     Register(g_userSettings.game.enableGyroAim);
     Register(g_userSettings.game.enableGyroRollgoal);
     Register(g_userSettings.game.gyroSensitivityX);

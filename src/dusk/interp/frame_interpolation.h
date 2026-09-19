@@ -20,6 +20,8 @@ bool presentation_sync_active();
 
 bool is_enabled();
 
+bool fancy_recording();
+
 bool should_capture();
 
 void record_final_mtx(Mtx m, const void* key);

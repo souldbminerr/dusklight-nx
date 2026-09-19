@@ -48,6 +48,11 @@ enum class FrameInterpMode : u8 {
     Unlimited = 2,
 };
 
+enum class InterpQuality : u8 {
+    Fast = 0,
+    Fancy = 1,
+};
+
 enum class LetterboxMode : u8 {
     Off = 0,
     On = 1,
@@ -123,6 +128,12 @@ template <>
 struct ConfigEnumRange<FrameInterpMode> {
     static constexpr auto min = FrameInterpMode::Off;
     static constexpr auto max = FrameInterpMode::Unlimited;
+};
+
+template <>
+struct ConfigEnumRange<InterpQuality> {
+    static constexpr auto min = InterpQuality::Fast;
+    static constexpr auto max = InterpQuality::Fancy;
 };
 
 template <>
@@ -245,6 +256,7 @@ struct UserSettings {
         ConfigVar<bool> disableWaterRefraction;
         ConfigVar<bool> enableTextureReplacements;
         ConfigVar<FrameInterpMode> enableFrameInterpolation;
+        ConfigVar<InterpQuality> interpolationQuality;
         ConfigVar<int> internalResolutionScale;
         ConfigVar<int> shadowResolutionMultiplier;
         ConfigVar<Resampler> resampler;

@@ -70,6 +70,11 @@ constexpr std::array kInterpolationModes = {
     "Unlimited",
 };
 
+constexpr std::array kInterpQualityModes = {
+    "Fast",
+    "Fancy",
+};
+
 constexpr std::array kAudioOutputModeNames = {
     "Stereo (Speakers)",
     "Stereo (Headphones)",
@@ -342,6 +347,8 @@ const Rml::String kDepthOfFieldHelpText =
 const Rml::String kUnlockFramerateHelpText =
     "<br/>Uses inter-frame interpolation to enable higher frame rates.<br/><br/>May introduce minor "
     "visual artifacts or animation glitches.";
+const Rml::String kInterpolationQualityHelpText =
+    "<br/>Fast mode uses a but lower quality pipeline.<br/><br/>Fancy uses a higher quality pipeline which improves visuals, but is more CPU intensive.";
 const Rml::String kTextureReplacementHelpText =
     "Enable installed texture replacements.";
 
@@ -883,6 +890,37 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             "Framerate Cap", "Limit the framerate to the specified value.", 30, 540, 1,
             [] { return getSettings().game.enableFrameInterpolation.getValue() != FrameInterpMode::Capped; },
             [](int) { presentation::update_frame_rate_preference(); });
+        leftPane.register_control(
+            leftPane.add_select_button({
+                .key = "Interpolation Quality",
+                .getValue =
+                    [] {
+                        return kInterpQualityModes[static_cast<u8>(
+                            getSettings().game.interpolationQuality.getValue())];
+                    },
+                .isModified =
+                    [] {
+                        return getSettings().game.interpolationQuality.getValue() !=
+                               getSettings().game.interpolationQuality.getDefaultValue();
+                    },
+            }),
+            rightPane, [](Pane& pane) {
+                for (int i = 0; i < kInterpQualityModes.size(); i++) {
+                    pane.add_button({
+                            .text = kInterpQualityModes[i],
+                            .isSelected =
+                                [i] {
+                                    return getSettings().game.interpolationQuality.getValue() == static_cast<InterpQuality>(i);
+                                },
+                        })
+                        .on_pressed([i] {
+                            mDoAud_seStartMenu(kSoundItemChange);
+                            getSettings().game.interpolationQuality.setValue(static_cast<InterpQuality>(i));
+                            config::save();
+                        });
+                }
+                pane.add_rml(kInterpolationQualityHelpText);
+            });
         config_bool_select(leftPane, rightPane, getSettings().game.enableMapBackground,
             {
                 .key = "Enable Mini-Map Shadows",

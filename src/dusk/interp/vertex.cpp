@@ -78,7 +78,7 @@ void* read(const J3DVertexBuffer* buffer, void* current, Array Record::* array) 
 }  // namespace
 
 void capture(J3DVertexBuffer* buffer, const J3DDeformData* deformation) {
-    if (!should_capture() || is_presentation_active()) return;
+    if (!fancy_recording() || !should_capture() || is_presentation_active()) return;
     if (deformation == nullptr) {
         reset(buffer);
         return;

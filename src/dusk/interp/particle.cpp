@@ -180,7 +180,7 @@ void reset(const JPABaseEmitter* e) {
 }
 
 void capture_birth(const JPABaseParticle* p, const JPAEmitterWorkData* work) {
-    if (!should_capture() || p->mAge != 0 || s_particles.contains(p)) {
+    if (!fancy_recording() || !should_capture() || p->mAge != 0 || s_particles.contains(p)) {
         return;
     }
     const JGeometry::TVec3 position(p->mOffsetPosition.x + p->mLocalPosition.x * work->mPublicScale.x,
@@ -190,7 +190,7 @@ void capture_birth(const JPABaseParticle* p, const JPAEmitterWorkData* work) {
 }
 
 void capture(const JPABaseParticle* p) {
-    if (should_capture() && p->mAge >= 0) {
+    if (fancy_recording() && should_capture() && p->mAge >= 0) {
         capture_state(s_particles, p, ParticleState(p));
         if (auto birth = s_childBirths.find(p); birth != s_childBirths.end()) {
             auto track = s_childTracks.find(birth->second.parent);
@@ -206,7 +206,7 @@ void capture(const JPABaseParticle* p) {
 }
 
 void capture(JPABaseEmitter* e) {
-    if (should_capture()) {
+    if (fancy_recording() && should_capture()) {
         capture_state(s_emitters, e, EmitterState(e));
 
         const auto* dynamics = e->pRes->getDyn();

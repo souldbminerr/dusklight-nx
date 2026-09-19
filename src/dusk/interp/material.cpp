@@ -531,7 +531,7 @@ void ModelBindings::restore() {
 }
 
 void record_model(J3DModel* model) {
-    if (!should_capture() || is_presentation_active()) {
+    if (!fancy_recording() || !should_capture() || is_presentation_active()) {
         return;
     }
 
@@ -558,13 +558,13 @@ void record_model(J3DModel* model) {
 void set_view_projection(J3DTexMtxInfo* info, f32 scaleS, f32 scaleT, f32 transS, f32 transT) {
     ViewProjection recipe{scaleS, scaleT, transS, transT};
     recipe.apply(info);
-    if (should_capture() && !is_presentation_active()) {
+    if (fancy_recording() && should_capture() && !is_presentation_active()) {
         tables().projections.insert_or_assign(info, recipe);
     }
 }
 
 void record_light_view(J3DMaterial* material) {
-    if (!should_capture() || is_presentation_active()) {
+    if (!fancy_recording() || !should_capture() || is_presentation_active()) {
         return;
     }
 

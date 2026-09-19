@@ -985,7 +985,7 @@ void dKyr_rain_move() {
     }
 
 #if TARGET_PC
-    s_rain.capture(rain_packet->raincnt, [&](int i) {
+    if (dusk::interp::fancy_recording()) s_rain.capture(rain_packet->raincnt, [&](int i) {
         return rain_packet->mRainEff[i].mBasePos + rain_packet->mRainEff[i].mPosition;
     });
 #endif
@@ -1357,10 +1357,10 @@ void dKyr_housi_move() {
     }
 
 #if TARGET_PC
-    s_housi_world.capture(housi_packet->mHousiCount, [&](int i) {
+    if (dusk::interp::fancy_recording()) s_housi_world.capture(housi_packet->mHousiCount, [&](int i) {
         return housi_packet->mHousiEff[i].mBasePos + housi_packet->mHousiEff[i].mPosition;
     });
-    s_housi_scale.capture(housi_packet->mHousiCount, [&](int i) {
+    if (dusk::interp::fancy_recording()) s_housi_scale.capture(housi_packet->mHousiCount, [&](int i) {
         return housi_packet->mHousiEff[i].mScale;
     });
 #endif
@@ -1668,10 +1668,10 @@ void dKyr_snow_move() {
     }
 
 #if TARGET_PC
-    s_snow_pos.capture(snow_packet->field_0x6d88, [&](int i) {
+    if (dusk::interp::fancy_recording()) s_snow_pos.capture(snow_packet->field_0x6d88, [&](int i) {
         return snow_packet->mSnowEff[i].mPosition;
     });
-    s_snow_base.capture(snow_packet->field_0x6d88, [&](int i) {
+    if (dusk::interp::fancy_recording()) s_snow_base.capture(snow_packet->field_0x6d88, [&](int i) {
         return snow_packet->mSnowEff[i].mBasePos;
     });
 #endif
@@ -1960,7 +1960,7 @@ void cloud_shadow_move() {
     }
 
 #if TARGET_PC
-    s_cloud.capture(packet->mCount, [&](int i) {
+    if (dusk::interp::fancy_recording()) s_cloud.capture(packet->mCount, [&](int i) {
         return packet->mCloudEff[i].mBasePos + packet->mCloudEff[i].mPosition;
     });
 #endif
@@ -2184,7 +2184,7 @@ void vrkumo_move() {
     }
 
 #if TARGET_PC
-    s_vrkumo.capture(100, [&](int i) {
+    if (dusk::interp::fancy_recording()) s_vrkumo.capture(100, [&](int i) {
         return vrkumo_packet->mVrkumoEff[i].mPosition;
     });
 #endif

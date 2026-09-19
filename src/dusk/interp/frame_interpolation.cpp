@@ -1,5 +1,7 @@
 #include "dusk/interp/frame_interpolation.h"
 
+#include "dusk/settings.h"
+
 #include "dusk/game_clock.h"
 #include "dusk/interp/lerp.h"
 #include "dusk/interp/material.h"
@@ -156,6 +158,11 @@ void begin_frame(float step) {
 
 bool is_enabled() {
     return game_clock::g_frameTiming.interpolating;
+}
+
+bool fancy_recording() {
+    return is_enabled() &&
+           getSettings().game.interpolationQuality.getValue() == InterpQuality::Fancy;
 }
 
 bool should_capture() {
