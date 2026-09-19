@@ -193,26 +193,37 @@ if(NOT TARGET borealis_ws)
   target_compile_options(borealis_ws PRIVATE ${DUSK_SWITCH_OPT_FLAGS})
 endif()
 
-if(NOT TARGET borealis_disc)
-  if(NOT TARGET xxhash)
-    include(FetchContent)
-    FetchContent_Declare(xxhash
-      URL https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz
-      URL_HASH SHA256=aae608dfe8213dfd05d909a57718ef82f30722c392344583d3f39050c7f29a80
-      SOURCE_SUBDIR cmake_unofficial
-      DOWNLOAD_EXTRACT_TIMESTAMP FALSE
-      EXCLUDE_FROM_ALL
-    )
-    set(XXHASH_BUILD_XXHSUM OFF CACHE INTERNAL "")
-    FetchContent_MakeAvailable(xxhash)
-  endif()
-  add_library(borealis_disc STATIC source/borealis_disc_switch.cpp)
-  add_library(borealis::disc ALIAS borealis_disc)
-  target_include_directories(borealis_disc PUBLIC
-    "${CMAKE_SOURCE_DIR}/extern/borealis/include")
-  target_link_libraries(borealis_disc PUBLIC borealis::core xxhash)
-  target_compile_features(borealis_disc PUBLIC cxx_std_20)
-  target_compile_options(borealis_disc PRIVATE ${DUSK_SWITCH_OPT_FLAGS})
+
+
+# Switch disc image container readers (raw ISO + GCZ/TGC/CISO/WBFS/WIA/RVZ).
+# Shared by aurora_dvd (runtime reads) and dusk validation (iso_validate).
+if(NOT TARGET dusk_switch_discimage)
+  add_library(dusk_switch_discimage STATIC source/switch_disc_image.cpp)
+  target_include_directories(dusk_switch_discimage PUBLIC
+   "${CMAKE_CURRENT_LIST_DIR}/include")
+  target_include_directories(dusk_switch_discimage PRIVATE
+    "$ENV{DEVKITPRO}/portlibs/switch/include"
+    /opt/devkitpro/portlibs/switch/include)
+  target_compile_features(dusk_switch_discimage PUBLIC cxx_std_20)
+  target_compile_options(dusk_switch_discimage PRIVATE ${DUSK_SWITCH_OPT_FLAGS})
+    set(_switch_zip_missing "")
+    foreach(_switch_zip_lib IN ITEMS z zstd bz2 lzma)
+      set(_switch_zip_path "$ENV{DEVKITPRO}/portlibs/switch/lib/lib${_switch_zip_lib}.a")
+      if(NOT EXISTS "${_switch_zip_path}")
+        set(_switch_zip_path "/opt/devkitpro/portlibs/switch/lib/lib${_switch_zip_lib}.a")
+      endif()
+      if(EXISTS "${_switch_zip_path}")
+        target_link_libraries(dusk_switch_discimage PUBLIC "${_switch_zip_path}")
+      else()
+        list(APPEND _switch_zip_missing "${_switch_zip_lib}")
+      endif()
+      unset(_switch_zip_path)
+    endforeach()
+    if(_switch_zip_missing)
+      message(FATAL_ERROR "dusk_switch_discimage: missing portlibs compression libs: ${_switch_zip_missing}. Install them with: pacman -S switch-zlib switch-zstd switch-bzip2 switch-xz")
+    endif()
+    unset(_switch_zip_lib)
+
 endif()
 
 # Native aurora_dvd (same target names): raw-ISO DVD layer, no nod/Rust.
@@ -227,6 +238,7 @@ if(NOT TARGET aurora_dvd)
     "${CMAKE_CURRENT_LIST_DIR}/include")
   # Match game TUs (dusklight_game_headers): fixed-width int types + BOOL.
   target_compile_definitions(aurora_dvd PRIVATE TARGET_PC=1)
+  target_link_libraries(aurora_dvd PRIVATE dusk_switch_discimage)
   target_compile_features(aurora_dvd PUBLIC cxx_std_20)
   target_compile_options(aurora_dvd PRIVATE ${DUSK_SWITCH_OPT_FLAGS})
 endif()
@@ -288,6 +300,7 @@ switch_add_nro(dusklight
 set(_switch_ofast_targets
   dusklight dusk_internal
   aurora_card aurora_core aurora_dvd aurora_gd aurora_gx aurora_main aurora_ms
+  dusk_switch_discimage
   aurora_mtx aurora_os aurora_pad aurora_si aurora_thp aurora_vi
 )
 foreach(_t IN LISTS _switch_ofast_targets)
