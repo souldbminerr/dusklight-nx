@@ -186,7 +186,7 @@ new file mode 100644
 index 000000000..3719c7e8f
 --- /dev/null
 +++ b/src/audio/switch/SDL_switchaudio.c
-@@ -0,0 +1,267 @@
+@@ -0,0 +1,268 @@
 +/*
 +  Simple DirectMedia Layer
 +  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
@@ -257,8 +257,7 @@ index 000000000..3719c7e8f
 +
 +    device->spec.format = SDL_AUDIO_S16;
 +    device->spec.channels = 2;
-+    device->spec.freq = 32000;
-+    // Voice runs at the game DSP rate; the AudioRenderer resamples in hardware.
++    device->spec.freq = 48000;
 +    SDL_UpdatedAudioDeviceFormat(device);
 +
 +    frames = device->buffer_size / SDL_AUDIO_FRAMESIZE(device->spec);

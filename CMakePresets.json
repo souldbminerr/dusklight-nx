@@ -23,6 +23,14 @@
       }
     },
     {
+      "name": "release",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL"
+      }
+    },
+    {
       "name": "ci",
       "hidden": true,
       "cacheVariables": {
@@ -459,7 +467,7 @@
       "name": "switch-devkitA64-release",
       "displayName": "Switch (devkitA64) Release",
       "inherits": [
-        "relwithdebinfo",
+        "release",
         "switch-devkitA64-base"
       ]
     },
